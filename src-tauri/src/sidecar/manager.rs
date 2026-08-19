@@ -6,8 +6,9 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -32,9 +33,37 @@ pub enum SidecarError {
     /// 进程异常退出
     #[error("Sidecar process terminated unexpectedly")]
     ProcessTerminated,
+
+    #[error("Sidecar did not report DSH_PORT within {0} seconds")]
+    StartupTimeout(u64),
 }
 
 type PendingRequests = Arc<Mutex<HashMap<String, oneshot::Sender<RpcResponse>>>>;
+
+async fn wait_for_port_signal(
+    port: &Mutex<Option<u16>>,
+    port_notify: &Notify,
+    port_closed: &AtomicBool,
+    timeout: Duration,
+) -> Result<u16, SidecarError> {
+    let wait = async {
+        loop {
+            // 先订阅再检查，避免端口在两步之间就绪而丢失通知。
+            let notified = port_notify.notified();
+            if let Some(port) = *port.lock().await {
+                return Ok(port);
+            }
+            if port_closed.load(Ordering::SeqCst) {
+                return Err(SidecarError::ProcessTerminated);
+            }
+            notified.await;
+        }
+    };
+
+    tokio::time::timeout(timeout, wait)
+        .await
+        .map_err(|_| SidecarError::StartupTimeout(timeout.as_secs()))?
+}
 
 /// Node.js Sidecar 运行时生命周期守护管理器
 pub struct SidecarManager {
@@ -47,6 +76,7 @@ pub struct SidecarManager {
     /// DSH web 服务器实际绑定端口（由 sidecar stdout 的 `DSH_PORT=` 行上报）
     port: Arc<Mutex<Option<u16>>>,
     port_notify: Arc<Notify>,
+    port_closed: Arc<AtomicBool>,
     /// Windows Job Object 守卫：宿主退出时 OS 自动终止 sidecar（防孤儿）。
     /// 只存不读：靠 Drop 关闭句柄触发 KILL_ON_JOB_CLOSE，故允许 dead_code。
     #[cfg(windows)]
@@ -82,7 +112,7 @@ impl SidecarManager {
             .current_dir(working_dir.as_ref())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit());
+            .stderr(Stdio::piped());
         // node 是控制台程序：默认 spawn 会弹出一个新的终端窗口。
         // CREATE_NO_WINDOW (0x08000000) 隐藏该窗口，避免打扰用户（tokio Command 原生支持）。
         #[cfg(windows)]
@@ -114,12 +144,14 @@ impl SidecarManager {
 
         let stdin = child.stdin.take().ok_or(SidecarError::PipeUnavailable)?;
         let stdout = child.stdout.take().ok_or(SidecarError::PipeUnavailable)?;
+        let stderr = child.stderr.take().ok_or(SidecarError::PipeUnavailable)?;
 
         let (stdin_tx, mut stdin_rx) = mpsc::channel::<String>(128);
         let (event_tx, _) = broadcast::channel::<RpcNotification>(256);
         let pending_requests: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
         let port: Arc<Mutex<Option<u16>>> = Arc::new(Mutex::new(None));
         let port_notify = Arc::new(Notify::new());
+        let port_closed = Arc::new(AtomicBool::new(false));
 
         // 后台任务 1: 写入子进程 stdin
         tokio::spawn(async move {
@@ -145,6 +177,7 @@ impl SidecarManager {
         let event_tx_clone = event_tx.clone();
         let port_clone = port.clone();
         let port_notify_clone = port_notify.clone();
+        let port_closed_clone = port_closed.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
@@ -180,7 +213,18 @@ impl SidecarManager {
 
                 warn!("Received unrecognized line from sidecar: {}", trimmed);
             }
+            port_closed_clone.store(true, Ordering::SeqCst);
+            port_notify_clone.notify_waiters();
             info!("Sidecar stdout reader terminated");
+        });
+
+        // AppImage 通常由桌面双击启动，没有可见终端；将 Node 的启动错误写入宿主日志。
+        tokio::spawn(async move {
+            let mut reader = BufReader::new(stderr).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                error!(target: "sidecar_stderr", "{}", line);
+            }
+            info!(target: "sidecar_stderr", "Sidecar stderr reader terminated");
         });
 
         let manager = Arc::new(Self {
@@ -192,6 +236,7 @@ impl SidecarManager {
             script_path: script_buf,
             port,
             port_notify,
+            port_closed,
             #[cfg(windows)]
             job,
         });
@@ -284,16 +329,9 @@ impl SidecarManager {
     /// 等待 Sidecar 上报 DSH web 服务器端口（`DSH_PORT=` 行）。
     ///
     /// # 返回
-    /// 侧边进程就绪后返回实际绑定的 loopback 端口；进程退出或读取结束时返回 `None`。
-    pub async fn wait_for_port(&self) -> Option<u16> {
-        loop {
-            let guard = self.port.lock().await;
-            if let Some(port) = *guard {
-                return Some(port);
-            }
-            drop(guard);
-            self.port_notify.notified().await;
-        }
+    /// 侧边进程就绪后返回实际绑定的 loopback 端口；进程退出或等待超时时返回错误。
+    pub async fn wait_for_port(&self, timeout: Duration) -> Result<u16, SidecarError> {
+        wait_for_port_signal(&self.port, &self.port_notify, &self.port_closed, timeout).await
     }
 
     /// 优雅终止并清理 Sidecar 子进程。
@@ -309,6 +347,44 @@ impl SidecarManager {
             info!("Sidecar process successfully killed and cleaned up");
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn waiting_for_port_times_out_instead_of_hanging_forever() {
+        let port = Mutex::new(None);
+        let notify = Notify::new();
+        let closed = AtomicBool::new(false);
+
+        let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_millis(10)).await;
+
+        assert!(matches!(result, Err(SidecarError::StartupTimeout(0))));
+    }
+
+    #[tokio::test]
+    async fn waiting_for_port_returns_reported_port() {
+        let port = Mutex::new(Some(43123));
+        let notify = Notify::new();
+        let closed = AtomicBool::new(false);
+
+        let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_secs(1)).await;
+
+        assert_eq!(result.expect("reported port"), 43123);
+    }
+
+    #[tokio::test]
+    async fn waiting_for_port_reports_terminated_sidecar() {
+        let port = Mutex::new(None);
+        let notify = Notify::new();
+        let closed = AtomicBool::new(true);
+
+        let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_secs(1)).await;
+
+        assert!(matches!(result, Err(SidecarError::ProcessTerminated)));
     }
 }
 

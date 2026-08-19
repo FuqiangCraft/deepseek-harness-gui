@@ -10,10 +10,42 @@ use sidecar::SidecarManager;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 /// Tauri 全局应用状态结构
 pub struct AppState {
     pub sidecar: Arc<SidecarManager>,
+}
+
+/// 保持非阻塞文件日志写入线程存活至应用退出。
+struct LogGuard(#[allow(dead_code)] tracing_appender::non_blocking::WorkerGuard);
+
+fn init_logging(app: &tauri::App) -> PathBuf {
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("deepseek-harness-logs"));
+    if let Err(error) = std::fs::create_dir_all(&log_dir) {
+        eprintln!("Failed to create log directory {}: {error}", log_dir.display());
+    }
+
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "harness.log");
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let subscriber = tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(file_writer),
+        );
+
+    if subscriber.try_init().is_ok() {
+        app.manage(LogGuard(guard));
+        tracing::info!("Startup log directory: {}", log_dir.display());
+    }
+    log_dir
 }
 
 /// 从 tar.gz 归档解压 sidecar 到目标目录。
@@ -44,6 +76,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            let log_dir = init_logging(app);
             let app_handle = app.handle().clone();
 
             // 后台初始化 Sidecar 守护进程：不阻塞主线程，窗口先渲染 loading 页保持响应。
@@ -151,14 +184,28 @@ pub fn run() {
                         let nav_window_handle = app_handle.clone();
                         let nav_manager = manager.clone();
                         tauri::async_runtime::spawn(async move {
-                            if let Some(port) = nav_manager.wait_for_port().await {
-                                let _ = nav_window_handle.emit("startup-progress", "正在加载界面…");
-                                let url: tauri::Url =
-                                    format!("http://127.0.0.1:{port}").parse().expect("loopback url");
-                                if let Some(window) = nav_window_handle.get_webview_window("main") {
-                                    let _ = window.navigate(url.clone());
+                            match nav_manager
+                                .wait_for_port(std::time::Duration::from_secs(60))
+                                .await
+                            {
+                                Ok(port) => {
+                                    let _ = nav_window_handle.emit("startup-progress", "正在加载界面…");
+                                    let url: tauri::Url = format!("http://127.0.0.1:{port}")
+                                        .parse()
+                                        .expect("loopback url");
+                                    if let Some(window) = nav_window_handle.get_webview_window("main") {
+                                        let _ = window.navigate(url.clone());
+                                    }
+                                    tracing::info!("Navigated webview to {url}");
                                 }
-                                tracing::info!("Navigated webview to {url}");
+                                Err(error) => {
+                                    let message = format!(
+                                        "引擎启动失败: {error}。详细日志: {}",
+                                        log_dir.display()
+                                    );
+                                    tracing::error!("{message}");
+                                    let _ = nav_window_handle.emit("startup-error", message);
+                                }
                             }
                         });
 
