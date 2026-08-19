@@ -323,7 +323,7 @@
         </div>
         <div class="error-title">引擎启动遇到问题</div>
         <div class="error-message" id="error-message">未能获取启动日志</div>
-        <button class="btn-retry" onclick="location.reload()">
+        <button class="btn-retry" id="btn-retry">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6"></path>
             <path d="M1 20v-6h6"></path>
@@ -383,11 +383,20 @@
         showError(String(e.payload || ""));
       }).catch(() => {});
 
+      // 重试按钮：刷新重载（移入外部脚本以兼容严格 CSP）
+      document.getElementById("btn-retry")?.addEventListener("click", () => {
+        location.reload();
+      });
+
       // 前端超时看门狗：如果 35 秒内仍未导航，给予友善提示与刷新重试按钮
       setTimeout(() => {
         if (loadingBox && loadingBox.style.display !== "none") {
           if (subHint) {
-            subHint.innerHTML = '启动时间较长？可尝试 <a href="javascript:location.reload()" style="color:#2563eb;text-decoration:underline;">刷新重试</a>';
+            subHint.innerHTML = '启动时间较长？可尝试 <a href="#" id="retry-link" style="color:#2563eb;text-decoration:underline;">刷新重试</a>';
+            document.getElementById("retry-link")?.addEventListener("click", (e) => {
+              e.preventDefault();
+              location.reload();
+            });
           }
         }
       }, 35000);

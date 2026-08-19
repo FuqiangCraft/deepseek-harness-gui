@@ -16,7 +16,7 @@ export const inject = ["tools"];
  * @param config - 插件配置
  */
 export function apply(ctx, config = {}) {
-    const endpoint = config.apiEndpoint ?? "https://api.internal.company.com";
+    const endpoint = config.apiEndpoint ?? "https://example.com";
     // 注册一个受 exec.signal 取消约束的内网 HTTP GET 工具
     ctx.tools.register(defineTool({
         name: "enterprise_http_get",

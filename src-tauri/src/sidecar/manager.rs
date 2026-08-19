@@ -89,7 +89,7 @@ impl SidecarManager {
     ///
     /// # 参数
     /// * `node_binary` - Node.js 可执行文件路径（系统 node 或打包的独立二进制）
-    /// * `script_path` - Sidecar 入口脚本路径（如 dist/index.js）
+    /// * `script_path` - Sidecar 入口脚本路径（如 dist/boot.js）
     /// * `working_dir` - 工作区路径
     ///
     /// # 返回值
@@ -139,9 +139,6 @@ impl SidecarManager {
                 }
             }
         };
-        #[cfg(not(windows))]
-        let job: Option<()> = None;
-
         let stdin = child.stdin.take().ok_or(SidecarError::PipeUnavailable)?;
         let stdout = child.stdout.take().ok_or(SidecarError::PipeUnavailable)?;
         let stderr = child.stderr.take().ok_or(SidecarError::PipeUnavailable)?;

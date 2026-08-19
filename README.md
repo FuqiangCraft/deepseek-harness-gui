@@ -10,7 +10,7 @@
 [![Rust](https://img.shields.io/badge/Rust-2021_Edition-orange.svg?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-≥22.19-green.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![DeepSeek](https://img.shields.io/badge/DeepSeek-Official_DSH-0066FF.svg)](https://platform.deepseek.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](./package.json)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
 </div>
 
@@ -26,7 +26,7 @@
 
 ## ✨ 核心特性
 
-- 🚀 **极薄宿主，极致性能**：基于 Tauri 2.0 构建原生外壳，内存开销比传统 Electron 降低 60% 以上，秒级启动。
+- 🚀 **极薄宿主**：基于 Tauri 2.0 构建原生外壳，不内置 Chromium，对比 Electron 可显著降低基础内存与磁盘占用；引擎由内置独立 Node.js 运行时承载（首次启动需解压引擎组件，约 5~10 秒）。
 - 📦 **开箱即用，免配环境**：安装包内嵌独立 Node.js 运行时与 Sidecar 压缩归档，最终用户**无需预装 Node.js 或 Rust 环境**。
 - 🤖 **完整官方 DSH 引擎**：以库模式启动官方 `dsh-base` + `dsh-web-app` Profile，享受官方实时更新的智能体生态与全套工具支持。
 - 🎨 **现代白阶视觉体验**：全新设计的纯白微光主题启动 Loading、官方 DeepSeek 高清矢量徽标与全尺寸视网膜图标集。
@@ -141,8 +141,8 @@ npx tauri build
 
 ```bash
 # 打上版本 Tag 并推送到 GitHub，自动触发 Windows、macOS (Apple Silicon/Intel)、Linux 云端构建
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
 构建完成后，GitHub Releases 将自动生成并挂载各平台安装包供直接下载。
@@ -165,6 +165,23 @@ git push origin v0.1.2
 
 ---
 
+## 🔐 安全模型与注意事项
+
+- **仅 Loopback 暴露**：DSH 引擎绑定 `127.0.0.1` 随机端口，不对公网开放。
+- **零硬编码密钥**：安装包不含任何 API Key，凭据由引擎保存在用户目录 `~/.dsh/`。
+- **Sidecar 生命周期守护**：Windows Job Object（`KILL_ON_JOB_CLOSE`）+ stdin/stdout 看门狗，双重防孤儿进程。
+- **⚠️ 本机威胁模型**：Loopback Web 服务无鉴权令牌，**本机任意进程均可连接该端口并驱动 Agent**。请只在可信机器上运行。
+
+完整安全策略见 [SECURITY.md](./SECURITY.md)。
+
+---
+
+## ™️ 商标声明
+
+DeepSeek、DeepSeek Harness 及相关名称、徽标是 DeepSeek AI 的商标。本项目为社区独立实现的第三方桌面客户端，与 DeepSeek AI 无关联，未获其官方背书。官方引擎 `@deepseek-ai/dsh*` 以 MIT 许可证开源。
+
+---
+
 ## 📄 开源许可证
 
-本项目基于 [MIT License](./package.json) 开源。
+本项目基于 [MIT License](./LICENSE) 开源。

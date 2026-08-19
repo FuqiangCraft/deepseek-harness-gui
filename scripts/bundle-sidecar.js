@@ -54,7 +54,7 @@ fs.copyFileSync(path.join(sidecarDir, "package.json"), path.join(deployDir, "pac
 fs.copyFileSync(path.join(sidecarDir, "pnpm-lock.yaml"), path.join(deployDir, "pnpm-lock.yaml"));
 fs.copyFileSync(path.join(sidecarDir, "pnpm-workspace.yaml"), path.join(deployDir, "pnpm-workspace.yaml"));
 fs.cpSync(path.join(sidecarDir, "patches"), path.join(deployDir, "patches"), { recursive: true });
-execSync("pnpm install --prod --no-frozen-lockfile --node-linker=hoisted", {
+execSync("pnpm install --prod --frozen-lockfile --node-linker=hoisted", {
   cwd: deployDir,
   stdio: "inherit",
 });

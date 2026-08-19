@@ -4,6 +4,12 @@ version = "0.1.3"
 description = "DeepSeek Harness Desktop Client"
 edition = "2021"
 
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = "s"
+
 [lib]
 name = "harness_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -24,9 +30,7 @@ tracing-appender = "0.2"
 uuid = { version = "1.10", features = ["v4"] }
 tar = "0.4"
 flate2 = "1.0"
-
-[dev-dependencies]
-tokio-test = "0.4"
+sha2 = "0.10"
 
 # Windows 孤儿进程防护：Job Object (KILL_ON_JOB_CLOSE)
 [target.'cfg(windows)'.dependencies]

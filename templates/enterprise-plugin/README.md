@@ -61,7 +61,7 @@ cp package.json ~/.dsh/profiles/web/node_modules/@acme/dsh-enterprise-plugin/
     - id: acme-enterprise
       name: '@acme/dsh-enterprise-plugin'
       config:
-        apiEndpoint: https://api.internal.company.com   # 可选，对应 Config
+        apiEndpoint: https://example.com                # 可选，对应 Config
 ```
 
 > ⚠️ **不要用普通 `- id: X, name: Y` 行**：那是 id-targeted 覆盖，只对已存在条目生效；

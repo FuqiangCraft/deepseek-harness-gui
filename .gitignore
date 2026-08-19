@@ -53,3 +53,6 @@ $RECYCLE.BIN/
 .cache/
 .temp/
 .tmp/
+
+# Project scratch & internal planning notes
+.scratch/
