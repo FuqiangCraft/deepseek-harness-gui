@@ -52,7 +52,7 @@ jobs:
       - name: Install dependencies
         run: |
           npm install
-          cd sidecar && pnpm install && cd ..
+          cd sidecar && pnpm install --no-frozen-lockfile && cd ..
 
       - name: Build Frontend and Bundle Sidecar
         run: npm run build:all
