@@ -95,10 +95,16 @@ pub fn run() {
                     .unwrap_or_else(|_| PathBuf::from("."));
                 let sidecar_runtime_dir = app_data_dir.join("sidecar");
                 let boot_script = sidecar_runtime_dir.join("dist").join("boot.js");
+                let required_boot_package = sidecar_runtime_dir
+                    .join("node_modules")
+                    .join("@deepseek-ai")
+                    .join("dsh-app-boot")
+                    .join("package.json");
                 let archive = resource_dir.join("sidecar.tar.gz");
                 let version = app_handle.package_info().version.to_string();
                 let version_marker = sidecar_runtime_dir.join(".version");
                 let needs_extract = !boot_script.exists()
+                    || !required_boot_package.exists()
                     || std::fs::read_to_string(&version_marker)
                         .map(|v| v.trim() != version)
                         .unwrap_or(true);
