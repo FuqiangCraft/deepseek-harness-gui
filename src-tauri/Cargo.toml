@@ -1,0 +1,37 @@
+[package]
+name = "harness-desktop"
+version = "0.1.2"
+description = "DeepSeek Harness Desktop Client"
+edition = "2021"
+
+[lib]
+name = "harness_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-shell = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.38", features = ["full"] }
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.10", features = ["v4"] }
+tar = "0.4"
+flate2 = "1.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+# Windows 孤儿进程防护：Job Object (KILL_ON_JOB_CLOSE)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
