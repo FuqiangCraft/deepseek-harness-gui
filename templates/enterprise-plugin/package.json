@@ -1,0 +1,24 @@
+{
+  "name": "@acme/dsh-enterprise-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "企业 DeepSeek Harness 插件模板：向引擎注册内网 HTTP 工具（demo）",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.7"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.7",
+    "@types/node": "^22.20.0",
+    "typescript": "^5.7.2"
+  }
+}
