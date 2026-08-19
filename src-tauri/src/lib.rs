@@ -55,12 +55,25 @@ fn extract_sidecar(
     archive: &Path,
     dest: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // 防符号链接/目录穿越：若目标目录已被替换为 symlink/junction，拒绝在它之上解压，
+    // 避免 remove_dir_all 顺着链接误删外部目录（现代 std 不跟随链接，这里显式加固）。
+    if let Ok(meta) = std::fs::symlink_metadata(dest) {
+        if meta.file_type().is_symlink() {
+            return Err(format!("refusing to extract over symlink: {}", dest.display()).into());
+        }
+    }
     // 覆盖解压到已有目录在 Windows 上会因 tar 条目覆盖旧文件而失败，
     // 因此先整体清空旧解压，再做干净替换（仅在版本变更/缺失时执行，代价可接受）。
     if dest.exists() {
         std::fs::remove_dir_all(dest)?;
     }
     std::fs::create_dir_all(dest)?;
+    // Unix 上收紧运行目录权限，避免其他本地用户读取解压出的引擎文件。
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o700))?;
+    }
     let file = std::fs::File::open(archive)?;
     let decoder = flate2::read::GzDecoder::new(file);
     let mut tar = tar::Archive::new(decoder);
@@ -69,6 +82,24 @@ fn extract_sidecar(
         entry.unpack_in(dest)?;
     }
     Ok(())
+}
+
+/// 计算文件的 SHA-256 十六进制摘要（流式计算，避免整文件载入内存）。
+fn sha256_hex(path: &Path) -> std::io::Result<String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest = hasher.finalize();
+    Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// 运行 Tauri 应用程序核心循环
@@ -103,21 +134,61 @@ pub fn run() {
                 let archive = resource_dir.join("sidecar.tar.gz");
                 let version = app_handle.package_info().version.to_string();
                 let version_marker = sidecar_runtime_dir.join(".version");
-                let needs_extract = !boot_script.exists()
-                    || !required_boot_package.exists()
-                    || std::fs::read_to_string(&version_marker)
-                        .map(|v| v.trim() != version)
-                        .unwrap_or(true);
+
+                // 解析 .version 标记：第一行版本号，第二行归档 SHA-256（旧标记可能只有单行）。
+                let mut marker_version_ok = false;
+                let mut marker_hash = String::new();
+                if let Some(content) = std::fs::read_to_string(&version_marker).ok() {
+                    let mut lines = content.lines();
+                    if let Some(v) = lines.next() {
+                        if v.trim() == version {
+                            marker_version_ok = true;
+                            marker_hash = lines.next().unwrap_or("").trim().to_string();
+                        }
+                    }
+                }
+
+                let files_ready = boot_script.exists() && required_boot_package.exists();
+                let mut needs_extract = !files_ready || !marker_version_ok;
+
+                // 便宜检查通过后，在 spawn_blocking 里校验归档内容哈希，捕获"版本号没变但归档内容变了"。
+                if !needs_extract && archive.exists() {
+                    let arc = archive.clone();
+                    match tokio::task::spawn_blocking(move || sha256_hex(&arc)).await {
+                        Ok(Ok(archive_hash)) => {
+                            if marker_hash.is_empty() {
+                                // 旧标记迁移：文件在，不重解压，仅刷新标记哈希。
+                                let _ = std::fs::write(
+                                    &version_marker,
+                                    format!("{version}\n{archive_hash}\n"),
+                                );
+                            } else if archive_hash != marker_hash {
+                                tracing::warn!("Bundled sidecar archive changed; re-extracting");
+                                needs_extract = true;
+                            }
+                        }
+                        Ok(Err(e)) => tracing::warn!("Failed to hash bundled sidecar archive: {e}"),
+                        Err(e) => tracing::warn!("Sidecar archive hash task failed: {e}"),
+                    }
+                }
+
                 if needs_extract && archive.exists() {
                     tracing::info!("Extracting bundled sidecar to {}", sidecar_runtime_dir.display());
                     let _ = app_handle.emit("startup-progress", "正在解压引擎组件（首次启动较慢）…");
                     let dest = sidecar_runtime_dir.clone();
                     let arc = archive.clone();
-                    let extract_result =
-                        tokio::task::spawn_blocking(move || extract_sidecar(&arc, &dest)).await;
+                    // 解压 + 计算归档哈希在同一个阻塞闭包里完成，成功后写 version\nhash 标记；
+                    // 中途失败不写标记，下次启动自愈重解压。
+                    let extract_result = tokio::task::spawn_blocking(
+                        move || -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+                            extract_sidecar(&arc, &dest)?;
+                            sha256_hex(&arc).map_err(|e| e.into())
+                        },
+                    )
+                    .await;
                     match extract_result {
-                        Ok(Ok(())) => {
-                            let _ = std::fs::write(&version_marker, &version);
+                        Ok(Ok(hash)) => {
+                            let _ = std::fs::write(&version_marker, format!("{version}\n{hash}\n"));
                         }
                         Ok(Err(e)) => {
                             let err = format!("解压引擎组件失败: {e}");
