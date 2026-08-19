@@ -67,17 +67,27 @@ console.log(`[bundle] 5. 删除裸 sidecar 目录（仅保留归档 ${archiveMb}
 fs.rmSync(stagingSidecarDir, { recursive: true, force: true });
 
 console.log("[bundle] 6. 复制独立 Node 运行时（可用 NODE_EXE_PATH 覆盖）...");
+const isWindows = process.platform === "win32";
+const nodeBinaryName = isWindows ? "node.exe" : "node";
+const targetNodePath = path.join(targetNodeDir, nodeBinaryName);
 const nodeSrc = process.env.NODE_EXE_PATH || process.execPath;
-fs.copyFileSync(nodeSrc, path.join(targetNodeDir, "node.exe"));
-const nodeVersion = execSync(`"${nodeSrc}" --version`).toString().trim();
+fs.copyFileSync(nodeSrc, targetNodePath);
+if (!isWindows) {
+  try {
+    fs.chmodSync(targetNodePath, 0o755);
+  } catch (e) {
+    console.warn(`[bundle] chmod 0755 failed: ${e.message}`);
+  }
+}
+const nodeVersion = execSync(`"${targetNodePath}" --version`).toString().trim();
 const ver = nodeVersion.match(/^v(\d+)\.(\d+)\./);
 const ok = ver && ((Number(ver[1]) === 22 && Number(ver[2]) >= 19) || Number(ver[1]) >= 24);
 if (!ok) {
   throw new Error(`捆绑的 Node 版本不满足 ^22.19 || >=24 要求: ${nodeVersion}`);
 }
 
-const nodeMb = (fs.statSync(path.join(targetNodeDir, "node.exe")).size / 1024 / 1024).toFixed(1);
+const nodeMb = (fs.statSync(targetNodePath).size / 1024 / 1024).toFixed(1);
 console.log(
-  `[bundle] 7. 捆绑完成: sidecar 归档 ${archiveMb} MB (raw ${rawSidecarMb} MB), node ${nodeVersion} ${nodeMb} MB`
+  `[bundle] 7. 捆绑完成: sidecar 归档 ${archiveMb} MB (raw ${rawSidecarMb} MB), node (${process.platform}) ${nodeVersion} ${nodeMb} MB`
 );
 console.log("[bundle] Ready for `cargo tauri build` packaging!");
