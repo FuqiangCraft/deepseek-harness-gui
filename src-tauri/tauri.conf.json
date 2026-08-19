@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "nsis",
+    "targets": "all",
     "resources": {
       "resources/sidecar.tar.gz": "sidecar.tar.gz",
       "resources/node/**/*": "node/"

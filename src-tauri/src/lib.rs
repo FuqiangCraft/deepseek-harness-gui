@@ -112,17 +112,30 @@ pub fn run() {
 
                 let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-                // 探测捆绑的 Node 运行时（优先 resources/node/node.exe，回退系统 node）
+                // 跨平台探测捆绑的 Node 运行时（Windows: node.exe, macOS/Linux: node）
+                let node_bin_name = if cfg!(windows) { "node.exe" } else { "node" };
                 let node_candidates = [
-                    resource_dir.join("node").join("node.exe"),
-                    resource_dir.join("resources").join("node").join("node.exe"),
-                    PathBuf::from("src-tauri").join("resources").join("node").join("node.exe"),
-                    PathBuf::from("node").join("node.exe"),
+                    resource_dir.join("node").join(node_bin_name),
+                    resource_dir.join("resources").join("node").join(node_bin_name),
+                    resource_dir.join("resources").join(node_bin_name),
+                    PathBuf::from("src-tauri").join("resources").join("node").join(node_bin_name),
+                    PathBuf::from("node").join(node_bin_name),
                 ];
                 let node_bin = node_candidates
                     .into_iter()
                     .find(|p| p.exists())
                     .unwrap_or_else(|| PathBuf::from("node"));
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(metadata) = std::fs::metadata(&node_bin) {
+                        let mut perms = metadata.permissions();
+                        perms.set_mode(0o755);
+                        let _ = std::fs::set_permissions(&node_bin, perms);
+                    }
+                }
+
                 tracing::info!("Using node binary: {}", node_bin.display());
                 tracing::info!("Sidecar script: {}", sidecar_script.display());
 

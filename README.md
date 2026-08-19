@@ -98,6 +98,8 @@ harness-agent/
 - **Rust 工具链**：`stable` (含 `cargo`)
 - **构建工具**：
   - Windows: C++ Build Tools (Visual Studio)
+  - macOS: Xcode Command Line Tools (`xcode-select --install`)
+  - Linux (Ubuntu/Debian): `sudo apt-get install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential`
 
 ### 2. 安装依赖
 
@@ -116,19 +118,34 @@ cd sidecar && pnpm install && cd ..
 npm run tauri dev
 ```
 
-### 4. 全量打包发布
+### 4. 本地全量打包
 
 ```bash
 # 步骤 1: 编译前端 + 组装打包 Sidecar 归档与 Node 运行时
 npm run build:all
 
-# 步骤 2: 生成最终 Windows NSIS 安装包与独立 exe
+# 步骤 2: 生成当前平台的安装包
 npx tauri build
 ```
 
-打包完成后，产物位于：
-- **Windows NSIS 安装程序**：`src-tauri/target/release/bundle/nsis/DeepSeek Harness_*.exe`
-- **独立绿色版可执行文件**：`src-tauri/target/release/harness-desktop.exe`
+打包完成后，各平台产物位于 `src-tauri/target/release/bundle/`：
+- **🪟 Windows**：`nsis/DeepSeek Harness_*_x64-setup.exe`
+- **🍎 macOS**：`dmg/DeepSeek Harness_*_aarch64.dmg` / `x64.dmg`
+- **🐧 Linux**：`appimage/deepseek-harness_*.AppImage` / `deb/deepseek-harness_*.deb`
+
+---
+
+## 🌐 自动化多端发布 (GitHub Actions)
+
+本项目已配置完整的全平台 CI/CD 自动化流水线（`.github/workflows/release.yml`）。无需本地配置 Mac 或 Linux 环境，即可通过 GitHub 自动编译发布所有平台的安装包：
+
+```bash
+# 打上版本 Tag 并推送到 GitHub，自动触发 Windows、macOS (Apple Silicon/Intel)、Linux 云端构建
+git tag v0.1.2
+git push origin v0.1.2
+```
+
+构建完成后，GitHub Releases 将自动生成并挂载各平台安装包供直接下载。
 
 ---
 
