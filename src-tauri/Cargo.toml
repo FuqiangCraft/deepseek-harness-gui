@@ -5,8 +5,8 @@ description = "DeepSeek Harness Desktop Client"
 edition = "2021"
 
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "thin"
+codegen-units = 16
 strip = true
 opt-level = "s"
 
