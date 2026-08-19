@@ -9,13 +9,12 @@
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 
 const rootDir = process.cwd();
 const sidecarDir = path.join(rootDir, "sidecar");
-const sidecarDist = path.join(sidecarDir, "dist");
-const sidecarModules = path.join(sidecarDir, "node_modules");
 const resourceDir = path.join(rootDir, "src-tauri", "resources");
 const stagingSidecarDir = path.join(resourceDir, "sidecar");
 const targetArchive = path.join(resourceDir, "sidecar.tar.gz");
@@ -44,10 +43,42 @@ for (const dir of [resourceDir]) {
 fs.mkdirSync(stagingSidecarDir, { recursive: true });
 fs.mkdirSync(targetNodeDir, { recursive: true });
 
-console.log("[bundle] 3. 组装 sidecar 暂存目录（dist + node_modules + package.json）...");
-fs.cpSync(sidecarDist, path.join(stagingSidecarDir, "dist"), { recursive: true });
-fs.cpSync(sidecarModules, path.join(stagingSidecarDir, "node_modules"), { recursive: true });
-fs.copyFileSync(path.join(sidecarDir, "package.json"), path.join(stagingSidecarDir, "package.json"));
+console.log("[bundle] 3. 生成可独立部署的 Sidecar 生产依赖目录...");
+// 不直接复制 pnpm 的 node_modules：Linux 上其中可能包含链接到虚拟 store 的符号链接，
+// 归档或首次解压后会变成悬空链接，最终导致 ERR_MODULE_NOT_FOUND。
+// 在工作区外安装生产依赖，避免把本机 pnpm 虚拟 store 的链接带进发布包。
+const deployRoot = fs.mkdtempSync(path.join(os.tmpdir(), "harness-sidecar-deploy-"));
+const deployDir = path.join(deployRoot, "app");
+fs.mkdirSync(deployDir, { recursive: true });
+fs.copyFileSync(path.join(sidecarDir, "package.json"), path.join(deployDir, "package.json"));
+fs.copyFileSync(path.join(sidecarDir, "pnpm-lock.yaml"), path.join(deployDir, "pnpm-lock.yaml"));
+fs.copyFileSync(path.join(sidecarDir, "pnpm-workspace.yaml"), path.join(deployDir, "pnpm-workspace.yaml"));
+fs.cpSync(path.join(sidecarDir, "patches"), path.join(deployDir, "patches"), { recursive: true });
+execSync("pnpm install --prod --no-frozen-lockfile --node-linker=hoisted", {
+  cwd: deployDir,
+  stdio: "inherit",
+});
+fs.cpSync(path.join(sidecarDir, "dist"), path.join(stagingSidecarDir, "dist"), { recursive: true });
+fs.cpSync(path.join(deployDir, "node_modules"), path.join(stagingSidecarDir, "node_modules"), {
+  recursive: true,
+});
+fs.copyFileSync(path.join(deployDir, "package.json"), path.join(stagingSidecarDir, "package.json"));
+fs.rmSync(deployRoot, { recursive: true, force: true });
+
+// 发布前反馈环：从部署目录本身解析关键启动依赖。漏包时在 CI 打包阶段直接失败，
+// 而不是等用户安装 AppImage 后卡在启动页。
+const resolveProbe = `
+  const { createRequire } = require("node:module");
+  const { join } = require("node:path");
+  const root = process.argv[1];
+  const requireFromDeploy = createRequire(join(root, "package.json"));
+  process.stdout.write(requireFromDeploy.resolve("@deepseek-ai/dsh-app-boot"));
+`;
+function resolveBootPackage(root) {
+  return execFileSync(process.execPath, ["-e", resolveProbe, root], { encoding: "utf8" }).trim();
+}
+const resolvedBootPackage = resolveBootPackage(stagingSidecarDir);
+console.log(`[bundle] 已验证关键启动依赖: ${resolvedBootPackage}`);
 
 console.log("[bundle] 4. 压缩 sidecar 为单归档 sidecar.tar.gz（排除非运行时文件，文件数约减半）...");
 // 排除 .d.ts/.map/README/LICENSE/CHANGELOG/test 等运行时不需要的文件，缩短首启解压时间。
@@ -59,6 +90,13 @@ execSync(
     `dist node_modules package.json`,
   { cwd: resourceDir, stdio: "inherit" }
 );
+
+// 验证最终归档，而不只验证归档前的暂存目录。
+const archiveCheckDir = fs.mkdtempSync(path.join(os.tmpdir(), "harness-sidecar-archive-check-"));
+execFileSync("tar", ["-xzf", targetArchive, "-C", archiveCheckDir], { stdio: "inherit" });
+const archivedBootPackage = resolveBootPackage(archiveCheckDir);
+console.log(`[bundle] 已验证最终归档依赖: ${archivedBootPackage}`);
+fs.rmSync(archiveCheckDir, { recursive: true, force: true });
 const rawSidecarMb = (dirSize(stagingSidecarDir) / 1024 / 1024).toFixed(1);
 const archiveMb = (fs.statSync(targetArchive).size / 1024 / 1024).toFixed(1);
 
