@@ -20,6 +20,8 @@
 
 **DeepSeek Harness Desktop** 是一款为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 量身打造的桌面端原生客户端。
 
+> 本项目是独立社区项目，并非 DeepSeek AI 官方产品，也未获得其背书。正式安装包仅通过本仓库 GitHub Releases 发布。
+
 客户端采用 **Rust (Tauri v2) + 独立 Node.js Sidecar** 的架构设计，将官方 DSH 引擎（`@deepseek-ai/dsh`）以内嵌库的形式在本地 Loopback 端口拉起，并通过 WebView 呈现官方交互界面，兼具原生桌面应用的流畅体验与官方智能体引擎的强大扩展能力。
 
 ---
@@ -90,6 +92,14 @@ harness-agent/
 ---
 
 ## 🛠️ 本地开发与构建
+
+## ✅ 正式支持范围
+
+- Windows 10/11 x64：NSIS
+- macOS 12+ Intel / Apple Silicon：签名并公证的 DMG
+- Ubuntu 22.04+ x64：AppImage、deb
+
+Windows ARM64、Linux ARM64、MSI 与 rpm 当前不属于正式支持范围。稳定版安装包必须通过签名、安装、首次启动、二次启动和自动升级门禁；未完成门禁的构建统一标记为 Preview。
 
 ### 1. 环境准备
 
@@ -173,6 +183,18 @@ git push origin v0.1.4
 - **⚠️ 本机威胁模型**：Loopback Web 服务无鉴权令牌，**本机任意进程均可连接该端口并驱动 Agent**。请只在可信机器上运行。
 
 完整安全策略见 [SECURITY.md](./SECURITY.md)。
+
+## 🩺 日志与故障诊断
+
+应用默认只写本地结构化日志，不上传遥测、崩溃、提示词或会话。通过原生菜单“帮助与诊断”可以打开日志目录、复制脱敏摘要、导出诊断 ZIP 或检查签名更新。日志最多保留 14 天且总量不超过 100 MiB。
+
+诊断包只包含应用版本、平台、启动阶段、耗时与近期脱敏日志，不包含 `~/.dsh` 设置、API Key、会话或工作区文件。提交 Issue 前仍请人工检查诊断包。应用数据位于系统为 `io.github.fuqiangchen.harness-agent` 分配的 App Data/Log 目录；DSH 用户数据继续位于 `~/.dsh/`。
+
+若应用停留在启动页：
+
+1. 点击“导出诊断包”。
+2. 确认包内没有个人信息。
+3. 使用 Installation problem 模板提交平台、安装包格式和诊断摘要。
 
 ---
 
