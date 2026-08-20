@@ -36,7 +36,7 @@ tauri-plugin-clipboard-manager = "2.0.0"
 
 # Windows 孤儿进程防护：Job Object (KILL_ON_JOB_CLOSE)
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security",
   "Win32_System_JobObjects",
