@@ -28,8 +28,8 @@
 
 ## ✨ 核心特性
 
-- 🚀 **极薄宿主**：基于 Tauri 2.0 构建原生外壳，不内置 Chromium，对比 Electron 可显著降低基础内存与磁盘占用；引擎由内置独立 Node.js 运行时承载（首次启动需解压引擎组件，约 5~10 秒）。
-- 📦 **开箱即用，免配环境**：安装包内嵌独立 Node.js 运行时与 Sidecar 压缩归档，最终用户**无需预装 Node.js 或 Rust 环境**。
+- 🚀 **极薄宿主**：基于 Tauri 2.0 构建原生外壳，不内置 Chromium；引擎由安装器预先展开的 Sidecar 与 Node 22 LTS 承载，首次启动不再解压依赖。
+- 📦 **开箱即用，免配环境**：安装包内嵌独立 Node.js 运行时与完整 Sidecar 生产闭包，最终用户**无需预装 Node.js、Rust 或手动更新依赖**。
 - 🤖 **完整官方 DSH 引擎**：以库模式启动官方 `dsh-base` + `dsh-web-app` Profile，享受官方实时更新的智能体生态与全套工具支持。
 - 🎨 **现代白阶视觉体验**：全新设计的纯白微光主题启动 Loading、官方 DeepSeek 高清矢量徽标与全尺寸视网膜图标集。
 - 🛡️ **进程生命周期与防孤儿守护**：
@@ -58,7 +58,7 @@ flowchart TB
     end
 
     MainWindow -- "1. 启动展示 Loading 界面" --> MainWindow
-    SidecarManager -- "2. 解压 sidecar.tar.gz 并 Spawn Node" --> BootScript
+    SidecarManager -- "2. 从安装资源直接 Spawn Node" --> BootScript
     BootScript --> Plugins --> WebServer
     WebServer -- "3. 输出 DSH_PORT=<port>" --> SidecarManager
     SidecarManager -- "4. window.navigate(http://127.0.0.1:port)" --> MainWindow
@@ -74,7 +74,7 @@ harness-agent/
 ├── src-tauri/                 # Tauri 宿主核心工程 (Rust)
 │   ├── src/                   # Rust 源码 (lib.rs 入口, sidecar 管理器, IPC 通信)
 │   ├── icons/                 # 全平台各尺寸应用图标 (ico, icns, png)
-│   ├── resources/             # 打包资源目录 (自动生成 sidecar.tar.gz 与 node.exe)
+│   ├── resources/             # 打包资源目录（自动生成 Sidecar 生产闭包与 Node 22）
 │   ├── tauri.conf.json        # Tauri 应用配置
 │   └── Cargo.toml             # Rust 依赖配置
 ├── sidecar/                   # Node.js Sidecar 引擎工程 (TypeScript)
@@ -82,7 +82,7 @@ harness-agent/
 │   ├── patches/               # 官方上游依赖补丁
 │   └── package.json           # DSH 官方依赖与工具链
 ├── scripts/                   # 自动化构建脚本
-│   └── bundle-sidecar.js      # Sidecar 归档压缩与 Node 运行时抽取脚本
+│   └── bundle-sidecar.js      # Sidecar 生产闭包与 Node 22 运行时组装脚本
 ├── index.html                 # 客户端启动 Loading 页面 (纯白极简动效)
 ├── app-icon.svg               # 1024x1024 高清矢量主图标
 ├── package.json               # 根工程构建脚本
@@ -131,7 +131,7 @@ npm run tauri dev
 ### 4. 本地全量打包
 
 ```bash
-# 步骤 1: 编译前端 + 组装打包 Sidecar 归档与 Node 运行时
+# 步骤 1: 编译前端 + 组装 Sidecar 生产闭包与 Node 22 运行时
 npm run build:all
 
 # 步骤 2: 生成当前平台的安装包

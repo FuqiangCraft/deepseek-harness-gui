@@ -79,9 +79,11 @@ function snapshotHarnessLogs(root, index) {
 /** 执行一次启动并返回日志记录的总耗时。 */
 async function launchOnce(index, userRoot) {
   const dshHome = path.join(userRoot, ".dsh");
+  const readyFile = path.join(userRoot, "startup-ready.json");
   fs.mkdirSync(dshHome, { recursive: true });
+  try { fs.rmSync(readyFile); } catch { /* 首次启动没有旧就绪标记。 */ }
   clearHarnessLogs(path.join(userRoot, "logs"));
-  const env = { ...process.env, RUST_LOG: process.env.RUST_LOG || "info", DSH_HOME: dshHome, HARNESS_LOG_DIR: path.join(userRoot, "logs"), HARNESS_APP_DATA_DIR: path.join(userRoot, "app-data"), HOME: userRoot, USERPROFILE: userRoot, APPDATA: path.join(userRoot, "AppData", "Roaming"), LOCALAPPDATA: path.join(userRoot, "AppData", "Local"), XDG_CONFIG_HOME: path.join(userRoot, ".config"), XDG_DATA_HOME: path.join(userRoot, ".local", "share") };
+  const env = { ...process.env, RUST_LOG: process.env.RUST_LOG || "info", DSH_HOME: dshHome, HARNESS_LOG_DIR: path.join(userRoot, "logs"), HARNESS_APP_DATA_DIR: path.join(userRoot, "app-data"), HARNESS_SMOKE_READY_FILE: readyFile, HOME: userRoot, USERPROFILE: userRoot, APPDATA: path.join(userRoot, "AppData", "Roaming"), LOCALAPPDATA: path.join(userRoot, "AppData", "Local"), XDG_CONFIG_HOME: path.join(userRoot, ".config"), XDG_DATA_HOME: path.join(userRoot, ".local", "share") };
   const command = process.env.HARNESS_SMOKE_WRAPPER || executable;
   const args = process.env.HARNESS_SMOKE_WRAPPER ? ["-a", executable] : [];
   const child = spawn(command, args, { env, stdio: "ignore" });
@@ -90,7 +92,10 @@ async function launchOnce(index, userRoot) {
   let duration = null;
   while (Date.now() < deadline && child.exitCode === null) {
     await new Promise((resolve) => setTimeout(resolve, 250));
-    duration = findNavigation(path.join(userRoot, "logs"));
+    if (fs.existsSync(readyFile)) {
+      try { duration = Number(JSON.parse(fs.readFileSync(readyFile, "utf8")).durationMs); } catch { /* 等待原子写入完成。 */ }
+    }
+    if (duration === null) duration = findNavigation(path.join(userRoot, "logs"));
     if (duration !== null) break;
   }
   child.kill();

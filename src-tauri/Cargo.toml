@@ -28,9 +28,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
 uuid = { version = "1.10", features = ["v4"] }
-tar = "0.4"
-flate2 = "1.0"
-sha2 = "0.10"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 tauri-plugin-updater = "2.0.0"
 tauri-plugin-process = "2.0.0"
