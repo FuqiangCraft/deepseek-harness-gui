@@ -13,6 +13,7 @@
 
 - 正式安装包限定为 Windows NSIS、macOS DMG、Linux AppImage 与 deb。
 - 应用标识改为 `io.github.fuqiangchen.harness-agent`。
+- 启动页诊断入口改为右下角悬浮面板，正常运行后可继续从系统托盘访问。
 
 ## [0.1.4] - 2026-08-19
 
