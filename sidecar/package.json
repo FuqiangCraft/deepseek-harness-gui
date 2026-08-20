@@ -120,7 +120,7 @@
     "node-addon-require-builtin": "^0.1.4"
   },
   "devDependencies": {
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.2.0",
     "typescript": "^5.7.2"
   }
 }
