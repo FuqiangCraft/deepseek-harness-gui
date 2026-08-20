@@ -98,7 +98,9 @@ impl SidecarManager {
         node_binary: impl AsRef<Path>,
         script_path: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
+        run_id: &str,
     ) -> Result<Arc<Self>, SidecarError> {
+        let run_id = run_id.to_string();
         let script_buf = script_path.as_ref().to_path_buf();
         info!(
             "Spawning sidecar: binary={:?}, script={:?}, cwd={:?}",
@@ -110,6 +112,7 @@ impl SidecarManager {
         let mut cmd = Command::new(node_binary.as_ref());
         cmd.arg(&script_buf)
             .current_dir(working_dir.as_ref())
+            .env("HARNESS_RUN_ID", &run_id)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -175,6 +178,7 @@ impl SidecarManager {
         let port_clone = port.clone();
         let port_notify_clone = port_notify.clone();
         let port_closed_clone = port_closed.clone();
+        let stdout_run_id = run_id.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
@@ -208,20 +212,28 @@ impl SidecarManager {
                     continue;
                 }
 
-                warn!("Received unrecognized line from sidecar: {}", trimmed);
+                info!(target: "sidecar_stdout", run_id = %stdout_run_id, component = "sidecar", "{}", trimmed);
             }
             port_closed_clone.store(true, Ordering::SeqCst);
             port_notify_clone.notify_waiters();
-            info!("Sidecar stdout reader terminated");
+            info!(run_id = %stdout_run_id, component = "sidecar", "Sidecar stdout reader terminated");
         });
 
         // AppImage 通常由桌面双击启动，没有可见终端；将 Node 的启动错误写入宿主日志。
+        let stderr_run_id = run_id.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                error!(target: "sidecar_stderr", "{}", line);
+                match serde_json::from_str::<Value>(&line) {
+                    Ok(record) if record.get("level").and_then(Value::as_str) == Some("error") => {
+                        error!(target: "sidecar_stderr", run_id = %stderr_run_id, component = "sidecar", "{}", line);
+                    }
+                    _ => {
+                        info!(target: "sidecar_stderr", run_id = %stderr_run_id, component = "sidecar", "{}", line)
+                    }
+                }
             }
-            info!(target: "sidecar_stderr", "Sidecar stderr reader terminated");
+            info!(target: "sidecar_stderr", run_id = %stderr_run_id, component = "sidecar", "Sidecar stderr reader terminated");
         });
 
         let manager = Arc::new(Self {
@@ -238,6 +250,36 @@ impl SidecarManager {
             job,
         });
 
+        let monitored_child = manager.child.clone();
+        let monitored_closed = manager.port_closed.clone();
+        let monitored_notify = manager.port_notify.clone();
+        let monitor_run_id = run_id;
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                let status = {
+                    let mut guard = monitored_child.lock().await;
+                    match guard.as_mut() {
+                        Some(child) => child.try_wait(),
+                        None => return,
+                    }
+                };
+                match status {
+                    Ok(Some(status)) => {
+                        monitored_closed.store(true, Ordering::SeqCst);
+                        monitored_notify.notify_waiters();
+                        error!(target: "sidecar_lifecycle", run_id = %monitor_run_id, component = "sidecar", exit_code = status.code(), "sidecar_process_exited");
+                        return;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        warn!(target: "sidecar_lifecycle", run_id = %monitor_run_id, component = "sidecar", "failed_to_query_sidecar_status: {error}");
+                        return;
+                    }
+                }
+            }
+        });
+
         Ok(manager)
     }
 
@@ -251,7 +293,10 @@ impl SidecarManager {
         method: impl Into<String>,
         params: Option<Value>,
     ) -> Result<RpcResponse, SidecarError> {
-        let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst).to_string();
+        let req_id = self
+            .request_counter
+            .fetch_add(1, Ordering::SeqCst)
+            .to_string();
         let request = RpcRequest::new(&req_id, method, params);
 
         let (resp_tx, resp_rx) = oneshot::channel();
@@ -260,8 +305,8 @@ impl SidecarManager {
             pending.insert(req_id.clone(), resp_tx);
         }
 
-        let serialized = serde_json::to_string(&request)
-            .map_err(|e| SidecarError::RpcError(e.to_string()))?;
+        let serialized =
+            serde_json::to_string(&request).map_err(|e| SidecarError::RpcError(e.to_string()))?;
 
         self.stdin_tx
             .send(serialized)
@@ -274,7 +319,9 @@ impl SidecarManager {
             Ok(Err(_)) => {
                 let mut pending = self.pending_requests.lock().await;
                 pending.remove(&req_id);
-                Err(SidecarError::RpcError("Response channel closed".to_string()))
+                Err(SidecarError::RpcError(
+                    "Response channel closed".to_string(),
+                ))
             }
             Err(_) => {
                 let mut pending = self.pending_requests.lock().await;
@@ -301,7 +348,9 @@ impl SidecarManager {
         if let Some(error) = res.error {
             return Err(SidecarError::RpcError(error.message));
         }
-        Ok(res.result.unwrap_or_else(|| serde_json::json!({"plugins": []})))
+        Ok(res
+            .result
+            .unwrap_or_else(|| serde_json::json!({"plugins": []})))
     }
 
     /// 查询当前所有已注册的工具列表
@@ -310,7 +359,9 @@ impl SidecarManager {
         if let Some(error) = res.error {
             return Err(SidecarError::RpcError(error.message));
         }
-        Ok(res.result.unwrap_or_else(|| serde_json::json!({"tools": []})))
+        Ok(res
+            .result
+            .unwrap_or_else(|| serde_json::json!({"tools": []})))
     }
 
     /// 订阅 Sidecar 发送给宿主的单向事件流。

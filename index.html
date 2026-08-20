@@ -233,6 +233,13 @@
         border-color: #94a3b8;
       }
 
+      .diagnostic-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+      }
+
       @keyframes spin {
         to {
           transform: rotate(360deg);
@@ -323,6 +330,10 @@
         </div>
         <div class="error-title">引擎启动遇到问题</div>
         <div class="error-message" id="error-message">未能获取启动日志</div>
+        <div class="diagnostic-actions">
+        <button class="btn-retry" id="btn-open-logs">打开日志目录</button>
+        <button class="btn-retry" id="btn-export-diagnostics">导出诊断包</button>
+        <button class="btn-retry" id="btn-copy-error">复制错误编号</button>
         <button class="btn-retry" id="btn-retry">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6"></path>
@@ -331,11 +342,13 @@
           </svg>
           刷新重试
         </button>
+        </div>
       </div>
     </div>
 
     <script type="module">
       import { listen } from "@tauri-apps/api/event";
+      import { invoke } from "@tauri-apps/api/core";
 
       const hint = document.getElementById("hint");
       const subHint = document.getElementById("sub-hint");
@@ -386,6 +399,24 @@
       // 重试按钮：刷新重载（移入外部脚本以兼容严格 CSP）
       document.getElementById("btn-retry")?.addEventListener("click", () => {
         location.reload();
+      });
+      document.getElementById("btn-open-logs")?.addEventListener("click", () => {
+        invoke("open_log_directory").catch((error) => showError(String(error)));
+      });
+      document.getElementById("btn-export-diagnostics")?.addEventListener("click", async () => {
+        try {
+          const path = await invoke("export_diagnostics_default");
+          alert(`诊断包已导出到：\n${path}`);
+        } catch (error) {
+          showError(String(error));
+        }
+      });
+      document.getElementById("btn-copy-error")?.addEventListener("click", async () => {
+        try {
+          await invoke("copy_diagnostics_summary");
+        } catch (error) {
+          showError(String(error));
+        }
       });
 
       // 前端超时看门狗：如果 35 秒内仍未导航，给予友善提示与刷新重试按钮
