@@ -39,9 +39,9 @@
       }
     },
     "resources": {
-      "resources/sidecar.tar.gz": "sidecar.tar.gz",
+      "resources/sidecar": "sidecar",
       "resources/sidecar-manifest.json": "sidecar-manifest.json",
-      "resources/node/**/*": "node/",
+      "resources/node": "node",
       "../THIRD_PARTY_LICENSES.txt": "THIRD_PARTY_LICENSES.txt"
     },
     "icon": [

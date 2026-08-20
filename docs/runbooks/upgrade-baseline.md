@@ -70,7 +70,7 @@ grep -n "if (call.id)"  node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js
 ## 6. 重建与打包
 
 ```bash
-npm run sidecar:bundle    # 编译 sidecar + 产 sidecar.tar.gz + 捆绑 node 运行时
+npm run sidecar:bundle    # 编译 sidecar + 组装生产闭包 + 捆绑 Node 22 运行时
 npm run tauri build       # 产出 NSIS 安装包（target: nsis）
 ```
 
@@ -92,6 +92,6 @@ npm run tauri build       # 产出 NSIS 安装包（target: nsis）
 - **孤儿进程防护**：Rust 宿主已用 Windows Job Object（`KILL_ON_JOB_CLOSE`）绑定 sidecar，
   宿主被强杀时 OS 自动回收；Node sidecar 另有 stdin 看门狗（管道断开自退）双保险。
   开发期仍可能遗留 `pnpm install`/`tauri dev` 的卡死进程，发布机打包前清理一次即可。
-- **App Data 解压**：Rust 宿主按版本号写 `.version` 标记，版本变更自动重解压 sidecar 归档。
+- **安装器展开**：Sidecar 生产闭包由安装器写入只读资源目录，Rust 宿主直接原地运行，避免首启解压。
 - **MSI 目标不可用**：sidecar 3.2 万+ 文件导致 WiX 卡死，故 `tauri.conf.json` `targets: "nsis"`，
-  不要改回 `all`。sidecar 以单归档（tar.gz）分发规避海量文件打包问题。
+  不要改回 `all`。发布流水线必须验证安装后的 Sidecar 关键入口，防止资源映射遗漏海量依赖文件。

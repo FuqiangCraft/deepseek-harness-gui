@@ -1,33 +1,22 @@
 /**
  * @fileoverview Tauri Sidecar 与 Node 运行时捆绑脚本
- * @description 将编译后的 Sidecar（dist + 全量 node_modules，含 dsh 引擎依赖与原生二进制）压缩为
- * 单个 `sidecar.tar.gz` 归档，并将独立 Node 运行时（≥22.19）复制到 src-tauri/resources/，
- * 供 Tauri 产出免装 Node 的独立安装包。Rust 宿主首启将归档解压到可写的 App Data 目录。
- *
- * 采用"单归档"而非"裸目录"的原因：sidecar 含 3.2 万+ 文件（node_modules），Tauri 资源打包
- * 对海量文件不可靠（实测 NSIS 安装后 sidecar 为空），单文件归档打包与安装都稳定。
+ * @description 将编译后的 Sidecar 生产闭包与 Node 22 LTS 直接部署到 Tauri resources，
+ * 让安装器承担文件展开工作，应用首次启动可从只读安装目录原地运行，不再解压依赖。
  */
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as crypto from "node:crypto";
 import { execFileSync, execSync } from "node:child_process";
 
 const rootDir = process.cwd();
 const sidecarDir = path.join(rootDir, "sidecar");
 const resourceDir = path.join(rootDir, "src-tauri", "resources");
 const stagingSidecarDir = path.join(resourceDir, "sidecar");
-const targetArchive = path.join(resourceDir, "sidecar.tar.gz");
 const targetManifest = path.join(resourceDir, "sidecar-manifest.json");
 const targetNodeDir = path.join(resourceDir, "node");
 
 const isWindows = process.platform === "win32";
-// Windows 上 Git for Windows 会把 GNU tar 放进 PATH 且优先于系统自带 bsdtar，
-// GNU tar 无法正确处理本脚本的归档参数（报 "Cannot connect to D:"），
-// 因此显式使用 Windows 自带的 bsdtar（System32\tar.exe），与 CI 环境行为一致。
-const tarBin = isWindows ? "C:\\Windows\\System32\\tar.exe" : "tar";
-
 /** 递归计算目录总字节数 */
 function dirSize(dir) {
   let total = 0;
@@ -89,37 +78,10 @@ function resolveBootPackage(root) {
 const resolvedBootPackage = resolveBootPackage(stagingSidecarDir);
 console.log(`[bundle] 已验证关键启动依赖: ${resolvedBootPackage}`);
 
-console.log("[bundle] 4. 压缩 sidecar 为单归档 sidecar.tar.gz（排除非运行时文件，文件数约减半）...");
-// 排除 .d.ts/.map/README/LICENSE/CHANGELOG/test 等运行时不需要的文件，缩短首启解压时间。
-// LICENSE 正文已由许可证生成器完整去重汇总到安装包根部 THIRD_PARTY_LICENSES.txt。
-// 用 execFileSync 直接传参：不经 shell，避免 GNU tar 的 `D:` 远程解析与引号转义问题。
-execFileSync(
-  tarBin,
-  [
-    "-czf", "sidecar.tar.gz", "-C", "sidecar",
-    "--exclude=*/test/*", "--exclude=*/tests/*", "--exclude=*/__tests__/*",
-    "--exclude=*.test.js", "--exclude=*.spec.js", "--exclude=*.d.ts", "--exclude=*.map",
-    "--exclude=README*", "--exclude=readme*", "--exclude=LICENSE*", "--exclude=license*",
-    "--exclude=CHANGELOG*", "--exclude=changelog*", "--exclude=*/.github/*",
-    "dist", "node_modules", "package.json",
-  ],
-  { cwd: resourceDir, stdio: "inherit" }
-);
-
-// 验证最终归档，而不只验证归档前的暂存目录。
-const archiveCheckDir = fs.mkdtempSync(path.join(os.tmpdir(), "harness-sidecar-archive-check-"));
-execFileSync(tarBin, ["-xzf", targetArchive, "-C", archiveCheckDir], { stdio: "inherit" });
-const archivedBootPackage = resolveBootPackage(archiveCheckDir);
-console.log(`[bundle] 已验证最终归档依赖: ${archivedBootPackage}`);
-fs.rmSync(archiveCheckDir, { recursive: true, force: true });
 const rawSidecarMb = (dirSize(stagingSidecarDir) / 1024 / 1024).toFixed(1);
-const archiveMb = (fs.statSync(targetArchive).size / 1024 / 1024).toFixed(1);
+console.log(`[bundle] 4. 保留可原地运行的 Sidecar 生产闭包 (${rawSidecarMb} MB)...`);
 
-// 只保留归档，删除裸目录（避免 Tauri 资源打包再碰海量文件）
-console.log(`[bundle] 5. 删除裸 sidecar 目录（仅保留归档 ${archiveMb} MB）...`);
-fs.rmSync(stagingSidecarDir, { recursive: true, force: true });
-
-console.log("[bundle] 6. 复制独立 Node 运行时（可用 NODE_EXE_PATH 覆盖）...");
+console.log("[bundle] 5. 复制 Node 22 LTS 运行时（可用 NODE_EXE_PATH 覆盖）...");
 const nodeBinaryName = isWindows ? "node.exe" : "node";
 const targetNodePath = path.join(targetNodeDir, nodeBinaryName);
 const nodeSrc = process.env.NODE_EXE_PATH || process.execPath;
@@ -133,22 +95,20 @@ if (!isWindows) {
 }
 const nodeVersion = execSync(`"${targetNodePath}" --version`).toString().trim();
 const ver = nodeVersion.match(/^v(\d+)\.(\d+)\./);
-const ok = ver && ((Number(ver[1]) === 22 && Number(ver[2]) >= 19) || Number(ver[1]) >= 24);
+const ok = ver && Number(ver[1]) === 22 && Number(ver[2]) >= 19;
 if (!ok) {
-  throw new Error(`捆绑的 Node 版本不满足 ^22.19 || >=24 要求: ${nodeVersion}`);
+  throw new Error(`捆绑运行时必须是 Node 22.19+ LTS，当前为 ${nodeVersion}。请使用 .node-version 或设置 NODE_EXE_PATH。`);
 }
-const archiveSha256 = crypto.createHash("sha256").update(fs.readFileSync(targetArchive)).digest("hex");
 const sidecarPackage = JSON.parse(fs.readFileSync(path.join(sidecarDir, "package.json"), "utf8"));
 fs.writeFileSync(targetManifest, `${JSON.stringify({
   schema: 1,
   appVersion: sidecarPackage.version,
   dshVersion: sidecarPackage.dependencies["@deepseek-ai/dsh"],
   nodeVersion,
-  archiveSha256,
 }, null, 2)}\n`);
 
 const nodeMb = (fs.statSync(targetNodePath).size / 1024 / 1024).toFixed(1);
 console.log(
-  `[bundle] 7. 捆绑完成: sidecar 归档 ${archiveMb} MB (raw ${rawSidecarMb} MB), node (${process.platform}) ${nodeVersion} ${nodeMb} MB`
+  `[bundle] 6. 捆绑完成: sidecar ${rawSidecarMb} MB, node (${process.platform}) ${nodeVersion} ${nodeMb} MB`
 );
 console.log("[bundle] Ready for `cargo tauri build` packaging!");

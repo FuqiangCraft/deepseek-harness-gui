@@ -6,7 +6,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": "^22.19.0"
   },
   "scripts": {
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc",

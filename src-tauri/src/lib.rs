@@ -1,7 +1,7 @@
 // 文件名称: lib.rs
 // 功能描述: Tauri 桌面客户端核心逻辑库——极薄宿主：拉起 Node Sidecar 运行官方 DSH Web Host，
 // 读取 DSH_PORT 后将主窗口导航到官方 dsh web UI；窗口销毁时回收 Sidecar 进程。
-// 内置 sidecar 以单归档（sidecar.tar.gz）随包分发，首启解压到可写 App Data 目录后运行。
+// 内置 Sidecar 由安装器展开到只读资源目录，宿主直接使用随包 Node 22 LTS 原地运行。
 
 pub mod diagnostics;
 pub mod ipc;
@@ -24,26 +24,6 @@ pub struct AppState {
 
 /// 保持非阻塞文件日志写入线程存活至应用退出。
 struct LogGuard(#[allow(dead_code)] tracing_appender::non_blocking::WorkerGuard);
-
-/// 构建时生成的 Sidecar 归档清单。
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SidecarBundleManifest {
-    app_version: String,
-    dsh_version: String,
-    archive_sha256: String,
-    node_version: String,
-}
-
-/// 已解压运行时的版本标记。
-#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct SidecarRuntimeMarker {
-    app_version: String,
-    dsh_version: String,
-    archive_sha256: String,
-    node_version: String,
-}
 
 fn init_logging(app: &tauri::App, run_id: &str) -> PathBuf {
     let log_dir = std::env::var_os("HARNESS_LOG_DIR")
@@ -195,85 +175,6 @@ fn handle_diagnostics_menu(app: &tauri::AppHandle, id: &str) {
     }
 }
 
-/// 从 tar.gz 归档解压 sidecar 到目标目录。
-/// 使用 `unpack_in` 防止路径穿越（仅信任随包自带的归档，防御性加固）。
-/// `+ Send + Sync` 以满足在 `spawn_blocking` 中执行的要求。
-fn extract_sidecar(
-    archive: &Path,
-    dest: &Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // 防符号链接/目录穿越：若目标目录已被替换为 symlink/junction，拒绝在它之上解压，
-    // 避免 remove_dir_all 顺着链接误删外部目录（现代 std 不跟随链接，这里显式加固）。
-    if let Ok(meta) = std::fs::symlink_metadata(dest) {
-        if meta.file_type().is_symlink() {
-            return Err(format!("refusing to extract over symlink: {}", dest.display()).into());
-        }
-    }
-    std::fs::create_dir_all(dest)?;
-    // Unix 上收紧运行目录权限，避免其他本地用户读取解压出的引擎文件。
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o700))?;
-    }
-    let file = std::fs::File::open(archive)?;
-    let decoder = flate2::read::GzDecoder::new(file);
-    let mut tar = tar::Archive::new(decoder);
-    for entry in tar.entries()? {
-        let mut entry = entry?;
-        entry.unpack_in(dest)?;
-    }
-    Ok(())
-}
-
-/// 解压到同级临时目录并在成功后替换正式目录，失败时保留原有可用运行时。
-fn extract_sidecar_atomic(
-    archive: &Path,
-    dest: &Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let parent = dest.parent().ok_or("sidecar destination has no parent")?;
-    std::fs::create_dir_all(parent)?;
-    let temp = parent.join(format!("sidecar.extracting-{}", uuid::Uuid::new_v4()));
-    let backup = parent.join(format!("sidecar.backup-{}", uuid::Uuid::new_v4()));
-    if let Err(error) = extract_sidecar(archive, &temp) {
-        let _ = std::fs::remove_dir_all(&temp);
-        return Err(error);
-    }
-    let had_existing = dest.exists();
-    if had_existing {
-        std::fs::rename(dest, &backup)?;
-    }
-    if let Err(error) = std::fs::rename(&temp, dest) {
-        if had_existing {
-            let _ = std::fs::rename(&backup, dest);
-        }
-        let _ = std::fs::remove_dir_all(&temp);
-        return Err(error.into());
-    }
-    if had_existing {
-        let _ = std::fs::remove_dir_all(backup);
-    }
-    Ok(())
-}
-
-/// 计算文件的 SHA-256 十六进制摘要（流式计算，避免整文件载入内存）。
-fn sha256_hex(path: &Path) -> std::io::Result<String> {
-    use sha2::{Digest, Sha256};
-    use std::io::Read;
-    let mut file = std::fs::File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
-    loop {
-        let n = file.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    let digest = hasher.finalize();
-    Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
-}
-
 /// 运行 Tauri 应用程序核心循环
 pub fn run() {
     #[cfg(windows)]
@@ -360,14 +261,7 @@ pub fn run() {
             }));
             tracing::info!(run_id = %run_id, component = "host", phase = "startup", app_version = %app.package_info().version, platform = std::env::consts::OS, arch = std::env::consts::ARCH, pid = std::process::id(), log_path = %log_dir.display(), "application_started");
             let app_handle = app.handle().clone();
-            let update_handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs(8)).await;
-                prompt_for_update(update_handle, true).await;
-            });
-
             // 后台初始化 Sidecar 守护进程：不阻塞主线程，窗口先渲染 loading 页保持响应。
-            // 首次运行解压归档较慢（数万文件），阻塞主线程会让窗口"未响应"。
             let startup_span = tracing::info_span!("startup_run", run_id = %run_id, component = "host");
             tauri::async_runtime::spawn(async move {
                 let startup_started = std::time::Instant::now();
@@ -378,92 +272,27 @@ pub fn run() {
                     .unwrap_or_else(|_| PathBuf::from("."));
                 let _ = app_handle.emit("startup-progress", "正在初始化引擎组件…");
 
-                // 解压 sidecar 归档到可写 App Data 目录（首启或版本变更时）
-                let app_data_dir = std::env::var_os("HARNESS_APP_DATA_DIR")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| app_handle.path().app_data_dir().unwrap_or_else(|_| PathBuf::from(".")));
-                let sidecar_runtime_dir = app_data_dir.join("sidecar");
-                let boot_script = sidecar_runtime_dir.join("dist").join("boot.js");
-                let required_boot_package = sidecar_runtime_dir
+                // Sidecar 由安装器随应用展开，运行时直接从只读资源目录启动。
+                let bundled_sidecar_dir = resource_dir.join("sidecar");
+                let boot_script = bundled_sidecar_dir.join("dist").join("boot.js");
+                let required_boot_package = bundled_sidecar_dir
                     .join("node_modules")
                     .join("@deepseek-ai")
                     .join("dsh-app-boot")
                     .join("package.json");
-                let archive = resource_dir.join("sidecar.tar.gz");
-                let manifest_path = resource_dir.join("sidecar-manifest.json");
-                let version_marker = sidecar_runtime_dir.join(".version");
-                let files_ready = boot_script.exists() && required_boot_package.exists();
-                let bundle_manifest = std::fs::read_to_string(&manifest_path).ok()
-                    .and_then(|raw| serde_json::from_str::<SidecarBundleManifest>(&raw).ok());
-                let installed_marker = std::fs::read_to_string(&version_marker).ok()
-                    .and_then(|raw| serde_json::from_str::<SidecarRuntimeMarker>(&raw).ok());
-                let expected_marker = bundle_manifest.as_ref().map(|manifest| SidecarRuntimeMarker {
-                    app_version: manifest.app_version.clone(),
-                    dsh_version: manifest.dsh_version.clone(),
-                    archive_sha256: manifest.archive_sha256.clone(),
-                    node_version: manifest.node_version.clone(),
-                });
-                let needs_extract = !files_ready || installed_marker.as_ref() != expected_marker.as_ref();
-
-                if archive.exists() && bundle_manifest.is_none() {
-                    let err = "Sidecar 清单缺失或格式错误，拒绝启动未验证归档".to_string();
+                if (!boot_script.exists() || !required_boot_package.exists())
+                    && !cfg!(debug_assertions)
+                {
+                    let err = "安装资源不完整：缺少可运行的 Sidecar 生产依赖".to_string();
                     app_handle.state::<diagnostics::DiagnosticsState>().set_error(&err);
-                    tracing::error!(phase = "archive_validation", "{err}");
-                    let _ = app_handle.emit("startup-error", err);
-                    return;
-                }
-
-                if needs_extract && archive.exists() {
-                    app_handle.state::<diagnostics::DiagnosticsState>().set_phase("sidecar_extraction");
-                    let extract_started = std::time::Instant::now();
-                    tracing::info!("Extracting bundled sidecar to {}", sidecar_runtime_dir.display());
-                    let _ = app_handle.emit("startup-progress", "正在解压引擎组件（首次启动较慢）…");
-                    let dest = sidecar_runtime_dir.clone();
-                    let arc = archive.clone();
-                    let expected_hash = bundle_manifest.as_ref().expect("manifest checked").archive_sha256.clone();
-                    let extract_result = tokio::task::spawn_blocking(
-                        move || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-                            let actual_hash = sha256_hex(&arc)?;
-                            if actual_hash != expected_hash { return Err("sidecar archive SHA-256 mismatch".into()); }
-                            extract_sidecar_atomic(&arc, &dest)
-                        },
-                    )
-                    .await;
-                    match extract_result {
-                        Ok(Ok(())) => {
-                            if let Some(marker) = &expected_marker {
-                                if let Ok(raw) = serde_json::to_string_pretty(marker) { let _ = std::fs::write(&version_marker, raw); }
-                            }
-                            tracing::info!(phase = "sidecar_extraction", duration_ms = extract_started.elapsed().as_millis(), "phase_complete");
-                        }
-                        Ok(Err(e)) => {
-                            let err = format!("解压引擎组件失败: {e}");
-                            app_handle.state::<diagnostics::DiagnosticsState>().set_error(&err);
-                            tracing::error!("{err}");
-                            let _ = app_handle.emit("startup-error", err);
-                            return;
-                        }
-                        Err(e) => {
-                            let err = format!("解压任务异常: {e}");
-                            app_handle.state::<diagnostics::DiagnosticsState>().set_error(&err);
-                            tracing::error!("{err}");
-                            let _ = app_handle.emit("startup-error", err);
-                            return;
-                        }
-                    }
-                }
-                if needs_extract && !archive.exists() && !cfg!(debug_assertions) {
-                    let err = "安装资源不完整：缺少 sidecar.tar.gz".to_string();
-                    app_handle.state::<diagnostics::DiagnosticsState>().set_error(&err);
-                    tracing::error!(phase = "archive_validation", "{err}");
+                    tracing::error!(phase = "resource_validation", "{err}");
                     let _ = app_handle.emit("startup-error", err);
                     return;
                 }
 
                 // 多候选路径自适应探测 Sidecar 入口脚本 (boot.js)
                 let candidates = [
-                    boot_script,                                                       // 解压后的内置 sidecar
-                    resource_dir.join("sidecar").join("dist").join("boot.js"),         // 兼容旧布局
+                    boot_script,                                                       // 安装器展开的内置 sidecar
                     PathBuf::from("sidecar").join("dist").join("boot.js"),             // dev: 仓库 sidecar
                     PathBuf::from("..").join("sidecar").join("dist").join("boot.js"),
                     std::env::current_dir()
@@ -477,7 +306,11 @@ pub fn run() {
                     .find(|p| p.exists())
                     .unwrap_or_else(|| PathBuf::from("sidecar/dist/boot.js"));
 
-                let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let working_dir = sidecar_script
+                    .parent()
+                    .and_then(Path::parent)
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
                 // 跨平台探测捆绑的 Node 运行时（Windows: node.exe, macOS/Linux: node）
                 let node_bin_name = if cfg!(windows) { "node.exe" } else { "node" };
@@ -537,7 +370,18 @@ pub fn run() {
                                     }
                                     nav_window_handle.state::<diagnostics::DiagnosticsState>().set_phase("navigation_complete");
                                     tracing::info!(phase = "web_server_ready", duration_ms = port_started.elapsed().as_millis(), "web_server_ready");
-                                    tracing::info!(phase = "navigation_complete", duration_ms = startup_started.elapsed().as_millis(), "navigation_complete");
+                                    let startup_duration_ms = startup_started.elapsed().as_millis();
+                                    tracing::info!(phase = "navigation_complete", duration_ms = startup_duration_ms, "navigation_complete");
+                                    // CI 冒烟测试使用同步就绪标记，避免强制终止进程时异步日志尚未刷盘。
+                                    if let Some(path) = std::env::var_os("HARNESS_SMOKE_READY_FILE") {
+                                        let payload = serde_json::json!({ "durationMs": startup_duration_ms });
+                                        let _ = std::fs::write(path, payload.to_string());
+                                    }
+                                    let update_handle = nav_window_handle.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                                        prompt_for_update(update_handle, true).await;
+                                    });
                                 }
                                 Err(error) => {
                                     let message = format!(
