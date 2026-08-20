@@ -125,6 +125,14 @@ async fn manual_check_for_update(app: tauri::AppHandle) {
 fn handle_diagnostics_menu(app: &tauri::AppHandle, id: &str) {
     let state = app.state::<diagnostics::DiagnosticsState>();
     match id {
+        "diagnostics_open_center" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.emit("harness:toggle-diagnostics", ());
+                let _ = window.eval("window.__HARNESS_OPEN_DIAGNOSTICS__ ? window.__HARNESS_OPEN_DIAGNOSTICS__() : (window.__HARNESS_OPEN_SETTINGS__ && window.__HARNESS_OPEN_SETTINGS__('diagnostics'))");
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
         "diagnostics_open_logs" => {
             let _ = diagnostics::open_log_directory_path(&state.log_dir);
         }
@@ -175,6 +183,22 @@ fn handle_diagnostics_menu(app: &tauri::AppHandle, id: &str) {
     }
 }
 
+fn diagnostics_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    tauri::plugin::Builder::<tauri::Wry>::new("diagnostics")
+        .invoke_handler(tauri::generate_handler![
+            diagnostics::get_diagnostics_summary,
+            diagnostics::get_diagnostic_summary,
+            diagnostics::copy_diagnostics_summary,
+            diagnostics::open_log_directory,
+            diagnostics::export_diagnostics,
+            diagnostics::export_diagnostics_default,
+            diagnostics::check_for_update,
+            diagnostics::restart_application,
+            manual_check_for_update
+        ])
+        .build()
+}
+
 /// 运行 Tauri 应用程序核心循环
 pub fn run() {
     #[cfg(windows)]
@@ -194,13 +218,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(diagnostics_plugin())
         .invoke_handler(tauri::generate_handler![
             diagnostics::get_diagnostics_summary,
+            diagnostics::get_diagnostic_summary,
             diagnostics::copy_diagnostics_summary,
             diagnostics::open_log_directory,
             diagnostics::export_diagnostics,
             diagnostics::export_diagnostics_default,
             diagnostics::check_for_update,
+            diagnostics::restart_application,
             manual_check_for_update
         ])
         .setup(|app| {
@@ -211,6 +238,13 @@ pub fn run() {
             // 托盘菜单不占用窗口内容区域，并在 WebView 导航后持续提供诊断入口。
             use tauri::menu::{Menu, MenuItem};
             use tauri::tray::TrayIconBuilder;
+            let open_center = MenuItem::with_id(
+                app,
+                "diagnostics_open_center",
+                "系统控制与诊断中心 (Ctrl+Shift+D)",
+                true,
+                None::<&str>,
+            )?;
             let open_logs = MenuItem::with_id(
                 app,
                 "diagnostics_open_logs",
@@ -242,7 +276,7 @@ pub fn run() {
                 None::<&str>,
             )?;
             let tray_menu =
-                Menu::with_items(app, &[&open_logs, &export, &copy, &update, &version])?;
+                Menu::with_items(app, &[&open_center, &open_logs, &export, &copy, &update, &version])?;
             let mut tray = TrayIconBuilder::new()
                 .tooltip("DeepSeek Harness · 帮助与诊断")
                 .menu(&tray_menu)
@@ -254,6 +288,10 @@ pub fn run() {
                 tray = tray.icon(icon);
             }
             tray.build(app)?;
+
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.eval("console.log('harness resident hooks initialized')");
+            }
 
             let panic_run_id = run_id.clone();
             std::panic::set_hook(Box::new(move |info| {
@@ -361,6 +399,7 @@ pub fn run() {
                                 .await
                             {
                                 Ok(port) => {
+                                    nav_window_handle.state::<diagnostics::DiagnosticsState>().set_port(port);
                                     let _ = nav_window_handle.emit("startup-progress", "正在加载界面…");
                                     let url: tauri::Url = format!("http://127.0.0.1:{port}")
                                         .parse()

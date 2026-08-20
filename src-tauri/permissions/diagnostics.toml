@@ -1,0 +1,14 @@
+[[permission]]
+identifier = "allow-diagnostics-commands"
+description = "Enables all custom diagnostics commands"
+commands.allow = [
+  "get_diagnostics_summary",
+  "get_diagnostic_summary",
+  "copy_diagnostics_summary",
+  "open_log_directory",
+  "export_diagnostics",
+  "export_diagnostics_default",
+  "check_for_update",
+  "restart_application",
+  "manual_check_for_update"
+]

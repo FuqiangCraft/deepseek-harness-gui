@@ -1,0 +1,345 @@
+diff --git a/lib/client.js b/lib/client.js
+index fe70b81a707313743b2e17e023f793ed1cf39b0e..1dd0e89e7b91ba87610fafe5b7df8693d7485333 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -84,6 +84,10 @@ window.__ModuleLoader__.load({
+ 				className: SettingsRoot_module_css_default.navIcon,
+ 				size: 16
+ 			});
++			if (id === "diagnostics") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDataOutline16, {
++				className: SettingsRoot_module_css_default.navIcon,
++				size: 16
++			});
+ 			return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconSettingsOutline16, {
+ 				className: SettingsRoot_module_css_default.navIcon,
+ 				size: 16
+@@ -199,6 +203,32 @@ window.__ModuleLoader__.load({
+ 					return new Set([...previous, id]);
+ 				});
+ 			}, []);
++			(0, react.useEffect)(() => {
++				const handleOpen = (e) => {
++					const targetSection = e?.detail?.section || "diagnostics";
++					openSection(targetSection);
++				};
++				window.addEventListener("harness:open-settings", handleOpen);
++				window.__HARNESS_OPEN_SETTINGS__ = openSection;
++				return () => {
++					window.removeEventListener("harness:open-settings", handleOpen);
++					delete window.__HARNESS_OPEN_SETTINGS__;
++				};
++			}, [openSection]);
++			(0, react.useEffect)(() => {
++				const onGlobalKey = (e) => {
++					if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "d") || e.key === "F1") {
++						e.preventDefault();
++						if (open && activeId === "diagnostics") {
++							close();
++						} else {
++							openSection("diagnostics");
++						}
++					}
++				};
++				window.addEventListener("keydown", onGlobalKey);
++				return () => window.removeEventListener("keydown", onGlobalKey);
++			}, [open, activeId, close, openSection]);
+ 			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+ 				(0, react_jsx_runtime.jsx)("button", {
+ 					type: "button",
+@@ -525,6 +555,274 @@ window.__ModuleLoader__.load({
+ 			let rows = [];
+ 			let onboardingVersion = -1;
+ 			let onboardingSteps = [];
++			function DiagnosticsSection() {
++				const [summary, setSummary] = react.useState({
++					platform: "Windows x86_64",
++					runId: "--",
++					port: location.port || "80",
++					logSize: "计算中...",
++					uptime: "--",
++					status: "就绪"
++				});
++				const [toast, setToast] = react.useState(null);
++				const [checkingUpdate, setCheckingUpdate] = react.useState(false);
++
++				const showToast = (msg, isErr = false) => {
++					setToast({ msg, isErr });
++					setTimeout(() => setToast(null), 3500);
++				};
++
++				const invokeCmd = async (cmd, args = {}) => {
++					const rawInvoke = window.__TAURI_INTERNALS__?.invoke || window.__TAURI__?.core?.invoke;
++					if (!rawInvoke) throw new Error("仅在桌面端可用");
++					try {
++						return await rawInvoke(cmd, args);
++					} catch (e) {
++						if (String(e).includes("not allowed") || String(e).includes("Plugin not found")) {
++							return await rawInvoke("plugin:diagnostics|" + cmd, args);
++						}
++						throw e;
++					}
++				};
++
++				react.useEffect(() => {
++					invokeCmd("get_diagnostics_summary")
++						.then((res) => {
++							if (res) {
++								const mb = res.logDirSizeBytes ? (res.logDirSizeBytes / (1024 * 1024)).toFixed(2) + " MB" : "< 1 MB";
++								setSummary({
++									platform: res.os || "Desktop",
++									runId: res.runId || "--",
++									port: res.port ? String(res.port) : location.port || "80",
++									logSize: mb,
++									uptime: res.durationMs ? (res.durationMs / 1000).toFixed(1) + " s" : "运行中",
++									status: "🟢 正常运行"
++								});
++							}
++						})
++						.catch(() => {
++							setSummary((prev) => ({
++								...prev,
++								port: location.port || "80",
++								runId: "Web 调试模式"
++							}));
++						});
++				}, []);
++
++				const handleOpenLogs = async () => {
++					try {
++						await invokeCmd("open_log_directory");
++						showToast("已在资源管理器中打开日志目录");
++					} catch (e) {
++						showToast(String(e), true);
++					}
++				};
++
++				const handleExportZip = async () => {
++					try {
++						showToast("正在生成诊断包…");
++						const path = await invokeCmd("export_diagnostics_default");
++						showToast("诊断包已生成：" + path);
++					} catch (e) {
++						showToast(String(e), true);
++					}
++				};
++
++				const handleCopySummary = async () => {
++					try {
++						await invokeCmd("copy_diagnostics_summary");
++						showToast("脱敏诊断摘要已复制到剪贴板");
++					} catch (e) {
++						navigator.clipboard.writeText(JSON.stringify(summary, null, 2));
++						showToast("基础环境信息已复制");
++					}
++				};
++
++				const handleRestart = async () => {
++					try {
++						showToast("正在重启 Harness 引擎…");
++						await invokeCmd("restart_application");
++					} catch (e) {
++						location.reload();
++					}
++				};
++
++				const handleCheckUpdate = async () => {
++					try {
++						setCheckingUpdate(true);
++						showToast("正在查询官方更新…");
++						await invokeCmd("manual_check_for_update");
++						showToast("检查更新流程已完成");
++					} catch (e) {
++						showToast(String(e), true);
++					} finally {
++						setCheckingUpdate(false);
++					}
++				};
++
++				const copyRunId = () => {
++					navigator.clipboard.writeText(summary.runId);
++					showToast("Run ID 已复制: " + summary.runId);
++				};
++
++				return react_jsx_runtime.jsxs("div", {
++					style: { display: "flex", flexDirection: "column", gap: "16px", maxWidth: "720px", color: "var(--dsw-alias-label-primary)" },
++					children: [
++						react_jsx_runtime.jsxs("div", {
++							style: { display: "flex", flexDirection: "column", gap: "4px" },
++							children: [
++								react_jsx_runtime.jsx("h3", {
++									style: { margin: 0, fontSize: "16px", fontWeight: 500, lineHeight: "24px" },
++									children: "系统运行状态与诊断控制中心"
++								}),
++								react_jsx_runtime.jsx("p", {
++									style: { margin: 0, fontSize: "13px", color: "var(--dsw-alias-label-tertiary)", lineHeight: "20px" },
++									children: "查看当前桌面端客户端与后台 Harness Sidecar 运行指标，导出排障日志包与检查在线升级。"
++								})
++							]
++						}),
++						react_jsx_runtime.jsxs("div", {
++							style: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" },
++							children: [
++								react_jsx_runtime.jsxs("div", {
++									style: { background: "var(--dsw-alias-bg-module-platform)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "12px", padding: "12px 14px" },
++									children: [
++										react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)" }, children: "运行平台" }),
++										react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 600, marginTop: "4px", color: "var(--dsw-alias-label-primary)" }, children: summary.platform })
++									]
++								}),
++								react_jsx_runtime.jsxs("div", {
++									style: { background: "var(--dsw-alias-bg-module-platform)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "12px", padding: "12px 14px" },
++									children: [
++										react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)" }, children: "服务端口" }),
++										react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 600, marginTop: "4px", color: "var(--dsw-alias-label-primary)" }, children: "127.0.0.1:" + summary.port })
++									]
++								}),
++								react_jsx_runtime.jsxs("div", {
++									style: { background: "var(--dsw-alias-bg-module-platform)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "12px", padding: "12px 14px" },
++									children: [
++										react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)" }, children: "日志占用" }),
++										react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 600, marginTop: "4px", color: "var(--dsw-alias-label-primary)" }, children: summary.logSize })
++									]
++								}),
++								react_jsx_runtime.jsxs("div", {
++									style: { background: "var(--dsw-alias-bg-module-platform)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "12px", padding: "12px 14px" },
++									children: [
++										react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)" }, children: "引擎状态" }),
++										react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 600, marginTop: "4px", color: "var(--dsw-alias-state-success-primary)" }, children: summary.status })
++									]
++								})
++							]
++						}),
++						react_jsx_runtime.jsxs("div", {
++							style: { display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--dsw-alias-bg-module-platform)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "10px", padding: "8px 14px" },
++							children: [
++								react_jsx_runtime.jsxs("div", {
++									style: { display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" },
++									children: [
++										react_jsx_runtime.jsx("span", { style: { color: "var(--dsw-alias-label-tertiary)" }, children: "会话运行标识 (Run ID):" }),
++										react_jsx_runtime.jsx("code", { style: { fontFamily: "var(--ds-font-family-code, monospace)", color: "var(--dsw-alias-label-primary)" }, children: summary.runId })
++									]
++								}),
++								react_jsx_runtime.jsx("button", {
++									type: "button",
++									onClick: copyRunId,
++									style: { border: "1px solid var(--dsw-alias-border-l2)", background: "transparent", color: "var(--dsw-alias-label-primary)", borderRadius: "6px", padding: "2px 8px", fontSize: "11px", cursor: "pointer" },
++									children: "复制 ID"
++								})
++							]
++						}),
++						react_jsx_runtime.jsx("div", {
++							style: { fontSize: "13px", fontWeight: 500, marginTop: "4px", color: "var(--dsw-alias-label-secondary)" },
++							children: "排障与运维工具箱"
++						}),
++						react_jsx_runtime.jsxs("div", {
++							style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
++							children: [
++								react_jsx_runtime.jsxs("button", {
++									type: "button",
++									onClick: handleOpenLogs,
++									style: { display: "flex", alignItems: "center", gap: "12px", padding: "14px", border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-module-platform)", borderRadius: "12px", cursor: "pointer", textAlign: "left" },
++									children: [
++										react_jsx_runtime.jsx("span", { style: { fontSize: "22px" }, children: "📁" }),
++										react_jsx_runtime.jsxs("div", {
++											children: [
++												react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 500, color: "var(--dsw-alias-label-primary)" }, children: "打开日志目录" }),
++												react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)", marginTop: "2px" }, children: "在系统文件管理器中浏览本地滚动日志" })
++											]
++										})
++									]
++								}),
++								react_jsx_runtime.jsxs("button", {
++									type: "button",
++									onClick: handleExportZip,
++									style: { display: "flex", alignItems: "center", gap: "12px", padding: "14px", border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-module-platform)", borderRadius: "12px", cursor: "pointer", textAlign: "left" },
++									children: [
++										react_jsx_runtime.jsx("span", { style: { fontSize: "22px" }, children: "📦" }),
++										react_jsx_runtime.jsxs("div", {
++											children: [
++												react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 500, color: "var(--dsw-alias-label-primary)" }, children: "导出完整诊断包" }),
++												react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)", marginTop: "2px" }, children: "生成脱敏 ZIP 故障报告与近三日诊断数据" })
++											]
++										})
++									]
++								}),
++								react_jsx_runtime.jsxs("button", {
++									type: "button",
++									onClick: handleCopySummary,
++									style: { display: "flex", alignItems: "center", gap: "12px", padding: "14px", border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-module-platform)", borderRadius: "12px", cursor: "pointer", textAlign: "left" },
++									children: [
++										react_jsx_runtime.jsx("span", { style: { fontSize: "22px" }, children: "📋" }),
++										react_jsx_runtime.jsxs("div", {
++											children: [
++												react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 500, color: "var(--dsw-alias-label-primary)" }, children: "复制诊断摘要" }),
++												react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)", marginTop: "2px" }, children: "一键复制脱敏环境、架构与启动参数" })
++											]
++										})
++									]
++								}),
++								react_jsx_runtime.jsxs("button", {
++									type: "button",
++									onClick: handleRestart,
++									style: { display: "flex", alignItems: "center", gap: "12px", padding: "14px", border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-module-platform)", borderRadius: "12px", cursor: "pointer", textAlign: "left" },
++									children: [
++										react_jsx_runtime.jsx("span", { style: { fontSize: "22px" }, children: "🔄" }),
++										react_jsx_runtime.jsxs("div", {
++											children: [
++												react_jsx_runtime.jsx("div", { style: { fontSize: "14px", fontWeight: 500, color: "var(--dsw-alias-label-primary)" }, children: "重启 Harness 引擎" }),
++												react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)", marginTop: "2px" }, children: "平滑重载 Sidecar 服务进程与应用上下文" })
++											]
++										})
++									]
++								})
++							]
++						}),
++						react_jsx_runtime.jsx("div", {
++							style: { fontSize: "13px", fontWeight: 500, marginTop: "4px", color: "var(--dsw-alias-label-secondary)" },
++							children: "版本与发布管理"
++						}),
++						react_jsx_runtime.jsxs("div", {
++							style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: "var(--dsw-alias-bg-module-platform)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "12px" },
++							children: [
++								react_jsx_runtime.jsxs("div", {
++									children: [
++										react_jsx_runtime.jsxs("div", {
++											style: { display: "flex", alignItems: "center", gap: "8px" },
++											children: [
++												react_jsx_runtime.jsx("span", { style: { fontSize: "14px", fontWeight: 500, color: "var(--dsw-alias-label-primary)" }, children: "DeepSeek Harness Desktop" }),
++												react_jsx_runtime.jsx("span", { style: { fontSize: "11px", fontWeight: 600, padding: "1px 6px", borderRadius: "4px", background: "var(--dsw-alias-interactive-bg-hover)", border: "1px solid var(--dsw-alias-border-l3)", color: "var(--dsw-alias-label-secondary)" }, children: "v0.1.4" })
++											]
++										}),
++										react_jsx_runtime.jsx("div", { style: { fontSize: "12px", color: "var(--dsw-alias-label-tertiary)", marginTop: "3px" }, children: "官方发布通道 · 自动更新保护已启用" })
++									]
++								}),
++								react_jsx_runtime.jsx("button", {
++									type: "button",
++									onClick: handleCheckUpdate,
++									disabled: checkingUpdate,
++									style: { height: "34px", padding: "0 14px", borderRadius: "17px", border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-button-primary-fill)", color: "var(--dsw-alias-label-primary-foreground)", fontSize: "13px", fontWeight: 500, cursor: checkingUpdate ? "default" : "pointer" },
++									children: checkingUpdate ? "检查中..." : "⚡ 立即检查更新"
++								})
++							]
++						}),
++						toast && react_jsx_runtime.jsx("div", {
++							style: { padding: "8px 12px", borderRadius: "8px", background: toast.isErr ? "var(--dsw-alias-state-error-bg, #fee2e2)" : "var(--dsw-alias-state-success-bg, #f0fdf4)", color: toast.isErr ? "var(--dsw-alias-state-error-primary)" : "var(--dsw-alias-state-success-primary)", fontSize: "12px", fontWeight: 500 },
++							children: toast.msg
++						})
++					]
++				});
++			}
+ 			const shellInjected = () => ({ hooks: {
+ 				sections: {
+ 					getSnapshot: () => {
+@@ -626,6 +924,12 @@ window.__ModuleLoader__.load({
+ 					scope: "root"
+ 				} }
+ 			}, GeneralSection));
++			ctx.slots.inject("settings.section", () => ctx.slots.register({
++				name: "settings.section",
++				id: "diagnostics",
++				order: 30,
++				label: () => "系统与诊断"
++			}, DiagnosticsSection));
+ 		}
+ 		//#endregion
+ 		exports.SettingsDocumentStore = SettingsDocumentStore;
