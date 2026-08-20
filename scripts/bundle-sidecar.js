@@ -11,6 +11,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as crypto from "node:crypto";
 import { execFileSync, execSync } from "node:child_process";
 
 const rootDir = process.cwd();
@@ -18,6 +19,7 @@ const sidecarDir = path.join(rootDir, "sidecar");
 const resourceDir = path.join(rootDir, "src-tauri", "resources");
 const stagingSidecarDir = path.join(resourceDir, "sidecar");
 const targetArchive = path.join(resourceDir, "sidecar.tar.gz");
+const targetManifest = path.join(resourceDir, "sidecar-manifest.json");
 const targetNodeDir = path.join(resourceDir, "node");
 
 const isWindows = process.platform === "win32";
@@ -41,6 +43,7 @@ function dirSize(dir) {
 
 console.log("[bundle] 1. 编译 Sidecar TypeScript...");
 execSync("npm run build", { cwd: sidecarDir, stdio: "inherit" });
+execSync("npm run licenses:check", { cwd: rootDir, stdio: "inherit" });
 
 console.log("[bundle] 2. 清理并重建 resources 目录...");
 for (const dir of [resourceDir]) {
@@ -88,6 +91,7 @@ console.log(`[bundle] 已验证关键启动依赖: ${resolvedBootPackage}`);
 
 console.log("[bundle] 4. 压缩 sidecar 为单归档 sidecar.tar.gz（排除非运行时文件，文件数约减半）...");
 // 排除 .d.ts/.map/README/LICENSE/CHANGELOG/test 等运行时不需要的文件，缩短首启解压时间。
+// LICENSE 正文已由许可证生成器完整去重汇总到安装包根部 THIRD_PARTY_LICENSES.txt。
 // 用 execFileSync 直接传参：不经 shell，避免 GNU tar 的 `D:` 远程解析与引号转义问题。
 execFileSync(
   tarBin,
@@ -95,7 +99,8 @@ execFileSync(
     "-czf", "sidecar.tar.gz", "-C", "sidecar",
     "--exclude=*/test/*", "--exclude=*/tests/*", "--exclude=*/__tests__/*",
     "--exclude=*.test.js", "--exclude=*.spec.js", "--exclude=*.d.ts", "--exclude=*.map",
-    "--exclude=README*", "--exclude=LICENSE*", "--exclude=CHANGELOG*",
+    "--exclude=README*", "--exclude=readme*", "--exclude=LICENSE*", "--exclude=license*",
+    "--exclude=CHANGELOG*", "--exclude=changelog*", "--exclude=*/.github/*",
     "dist", "node_modules", "package.json",
   ],
   { cwd: resourceDir, stdio: "inherit" }
@@ -132,6 +137,15 @@ const ok = ver && ((Number(ver[1]) === 22 && Number(ver[2]) >= 19) || Number(ver
 if (!ok) {
   throw new Error(`捆绑的 Node 版本不满足 ^22.19 || >=24 要求: ${nodeVersion}`);
 }
+const archiveSha256 = crypto.createHash("sha256").update(fs.readFileSync(targetArchive)).digest("hex");
+const sidecarPackage = JSON.parse(fs.readFileSync(path.join(sidecarDir, "package.json"), "utf8"));
+fs.writeFileSync(targetManifest, `${JSON.stringify({
+  schema: 1,
+  appVersion: sidecarPackage.version,
+  dshVersion: sidecarPackage.dependencies["@deepseek-ai/dsh"],
+  nodeVersion,
+  archiveSha256,
+}, null, 2)}\n`);
 
 const nodeMb = (fs.statSync(targetNodePath).size / 1024 / 1024).toFixed(1);
 console.log(
