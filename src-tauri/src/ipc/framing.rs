@@ -31,7 +31,7 @@ pub fn read_frame<R: BufRead>(reader: &mut R) -> io::Result<Option<String>> {
     if bytes_read == 0 {
         return Ok(None);
     }
-    let trimmed = line.trim_end_matches(|c| c == '\r' || c == '\n').to_string();
+    let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
     if trimmed.is_empty() {
         // 跳过纯空行
         return read_frame(reader);

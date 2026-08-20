@@ -34,6 +34,35 @@ const BIN_NAME = "harness-sidecar";
 const PROFILE_NAME = "web";
 /** Loader 的第一个解析锚点：本包 package.json（其 node_modules 含全部 dsh 包）。 */
 const INSTALL_ANCHOR = fileURLToPath(new URL("../package.json", import.meta.url));
+/** 宿主为本次启动分配的关联标识。 */
+const RUN_ID = process.env.HARNESS_RUN_ID || "unknown";
+
+/** 将普通诊断写入 stderr，确保 stdout 只承载宿主控制协议。 */
+function logDiagnostic(level: "info" | "error", message: string, detail?: unknown): void {
+  const record = JSON.stringify({ component: "sidecar", run_id: RUN_ID, level, message, detail });
+  process.stderr.write(`${record}\n`);
+}
+
+/** 将未知异常格式化为保留 cause 链和 stack 的安全诊断对象。 */
+function formatError(error: unknown): object {
+  const chain: Array<{ name: string; message: string; stack?: string }> = [];
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (current instanceof Error) {
+      chain.push({ name: current.name, message: current.message, stack: current.stack });
+      current = (current as Error & { cause?: unknown }).cause;
+    } else {
+      chain.push({ name: "UnknownError", message: String(current) });
+      break;
+    }
+  }
+  if (error instanceof AggregateError) {
+    return { chain, aggregate: error.errors.map((item) => item instanceof Error ? { name: item.name, message: item.message, stack: item.stack } : String(item)) };
+  }
+  return { chain };
+}
 
 /**
  * 在 profile 目录内准备空根配置 `cordis.yml`（内容 `[]`），
@@ -119,9 +148,12 @@ function requestExit(ctx: Context | null, code: number): void {
 async function main() {
   installFailLoud(BIN_NAME);
 
+  const profileStarted = performance.now();
   const prepared = await prepareWebProfile();
+  logDiagnostic("info", "phase_complete", { phase: "profile_initialization", duration_ms: Math.round(performance.now() - profileStarted) });
   let ctx: Context | null = null;
 
+  const pluginsStarted = performance.now();
   ctx = await boot(
     BIN_NAME,
     prepared.rootConfig,
@@ -135,15 +167,17 @@ async function main() {
     },
     prepared.bareModuleBaseUrl,
   );
+  logDiagnostic("info", "phase_complete", { phase: "plugin_tree_loading", duration_ms: Math.round(performance.now() - pluginsStarted) });
 
   // 插件树已 settle（assertEntriesActivated 通过），webserver 已监听
   const port = ctx.webServer.port;
+  logDiagnostic("info", "web_server_ready", { phase: "web_server_ready", port });
   console.log(`DSH_PORT=${port}`);
 
   // 打印已注册工具清单（含企业插件贡献），便于诊断工具注册
   try {
     const toolNames = ctx.tools.schemas().map((t) => t.name);
-    console.log(`[boot] registered tools (${toolNames.length}): ${toolNames.join(", ")}`);
+    logDiagnostic("info", "registered_tools", { count: toolNames.length, names: toolNames });
   } catch {
     // 工具服务未就绪时跳过该日志，不影响启动
   }
@@ -158,27 +192,16 @@ async function main() {
   process.stdin.on("close", () => process.exit(0));
 }
 
+process.on("uncaughtException", (error) => {
+  logDiagnostic("error", "uncaught_exception", formatError(error));
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  logDiagnostic("error", "unhandled_rejection", formatError(reason));
+  process.exit(1);
+});
+
 main().catch((err: unknown) => {
-  const lines: string[] = [];
-  let current: unknown = err;
-  const seen = new Set<unknown>();
-  while (current && !seen.has(current)) {
-    seen.add(current);
-    if (current instanceof AggregateError) {
-      lines.push(`[AggregateError] ${current.message}`);
-      for (const sub of current.errors) {
-        lines.push(`  └─ ${sub instanceof Error ? sub.message : String(sub)}`);
-      }
-      current = current.errors[0];
-    } else if (current instanceof Error) {
-      lines.push(`[Error] ${current.message}`);
-      current = (current as Error & { cause?: unknown }).cause;
-    } else {
-      lines.push(String(current));
-      break;
-    }
-  }
-  console.error("[Sidecar Boot Error]");
-  for (const line of lines) console.error(line);
+  logDiagnostic("error", "sidecar_boot_failed", formatError(err));
   process.exit(1);
 });
