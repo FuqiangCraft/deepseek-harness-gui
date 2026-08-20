@@ -5,7 +5,7 @@
 
 # 代码签名与公证操作手册
 
-未签名的安装包会触发 **Windows SmartScreen** 与 **macOS Gatekeeper** 拦截（用户需"仍要运行"）。签名后两类警告消除。本手册覆盖 `tauri-action` 的标准签名 env 配置，CI 脚手架已就位（见 `.github/workflows/release.yml`），**未配置 secrets 时发布照常进行但跳过签名**。
+未签名的安装包会触发 **Windows SmartScreen** 与 **macOS Gatekeeper** 拦截（用户需"仍要运行"）。签名后两类警告消除。本手册覆盖 CI 工作流 `release.yml` 的签名配置：签名证书由 **tauri-bundler** 从环境变量读取（见下文 secrets 表），工作流只把这些变量导出到环境（secret 为空时不会导出，从而跳过签名）。**未配置 secrets 时发布照常进行但跳过签名。**
 
 ---
 
