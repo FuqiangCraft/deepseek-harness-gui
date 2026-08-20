@@ -171,6 +171,72 @@ async function main() {
 
   // 插件树已 settle（assertEntriesActivated 通过），webserver 已监听
   const port = ctx.webServer.port;
+
+  // 注册全局桥接脚本：顶栏直达按钮、Ctrl+Shift+D 快捷键、托盘菜单全联动唤起 DSH 设置中的“系统与诊断”
+  ctx.webServer.tapIndex((html) => {
+    const bridgeScript = `<script id="harness-settings-bridge">
+(function() {
+  if (window.__HARNESS_SETTINGS_BRIDGE__) return;
+  window.__HARNESS_SETTINGS_BRIDGE__ = true;
+
+  function openDiagnostics() {
+    if (window.__HARNESS_OPEN_SETTINGS__) {
+      window.__HARNESS_OPEN_SETTINGS__('diagnostics');
+    } else {
+      window.dispatchEvent(new CustomEvent('harness:open-settings', { detail: { section: 'diagnostics' } }));
+    }
+  }
+  window.__HARNESS_OPEN_DIAGNOSTICS__ = openDiagnostics;
+
+  function mountHeaderButton() {
+    if (document.getElementById('harness-header-btn')) return;
+
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const sessionLogBtn = buttons.find(b => b.textContent && (b.textContent.includes('Session log') || b.textContent.includes('会话日志')));
+    if (!sessionLogBtn || !sessionLogBtn.parentNode) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'harness-header-btn';
+    btn.type = 'button';
+    btn.title = '系统运行状态与诊断设置 (Ctrl+Shift+D)';
+    btn.style.cssText = 'display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:var(--dsw-alias-bg-module-platform,#f1f5f9);border:1px solid var(--dsw-alias-border-l2,#e2e8f0);color:var(--dsw-alias-label-primary,#334155);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.15s ease;user-select:none;margin-right:8px;flex-shrink:0;';
+    btn.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block;"></span><span>系统诊断</span><span style="font-size:10px;opacity:0.65;font-family:monospace;background:var(--dsw-alias-interactive-bg-hover,#e2e8f0);padding:1px 4px;border-radius:4px;">Ctrl+Shift+D</span>';
+
+    btn.onmouseenter = () => {
+      btn.style.borderColor = 'var(--dsw-alias-interactive-border-hover, #93c5fd)';
+      btn.style.color = 'var(--dsw-alias-button-primary-fill, #2563eb)';
+    };
+    btn.onmouseleave = () => {
+      btn.style.borderColor = 'var(--dsw-alias-border-l2, #e2e8f0)';
+      btn.style.color = 'var(--dsw-alias-label-primary, #334155)';
+    };
+    btn.onclick = openDiagnostics;
+
+    sessionLogBtn.parentNode.insertBefore(btn, sessionLogBtn);
+  }
+
+  mountHeaderButton();
+  let tries = 0;
+  const interval = setInterval(() => {
+    mountHeaderButton();
+    tries++;
+    if (tries > 20) clearInterval(interval);
+  }, 500);
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') || e.key === 'F1') {
+      e.preventDefault();
+      openDiagnostics();
+    }
+  });
+})();
+</script>`;
+    if (html.includes("</body>")) {
+      return html.replace("</body>", `${bridgeScript}\n</body>`);
+    }
+    return `${html}\n${bridgeScript}`;
+  });
+
   logDiagnostic("info", "web_server_ready", { phase: "web_server_ready", port });
   console.log(`DSH_PORT=${port}`);
 

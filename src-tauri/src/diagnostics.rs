@@ -23,6 +23,7 @@ pub struct DiagnosticsState {
     pub started_at: Instant,
     phase: Mutex<String>,
     last_error: Mutex<Option<String>>,
+    port: Mutex<Option<u16>>,
 }
 
 impl DiagnosticsState {
@@ -34,6 +35,7 @@ impl DiagnosticsState {
             started_at: Instant::now(),
             phase: Mutex::new("initializing".into()),
             last_error: Mutex::new(None),
+            port: Mutex::new(None),
         }
     }
 
@@ -42,9 +44,26 @@ impl DiagnosticsState {
         *self.phase.lock().unwrap_or_else(|e| e.into_inner()) = phase.into();
     }
 
+    /// 记录 DSH Web 服务实际绑定的端口。
+    pub fn set_port(&self, port: u16) {
+        *self.port.lock().unwrap_or_else(|e| e.into_inner()) = Some(port);
+    }
+
     /// 保存经过脱敏的最近错误。
     pub fn set_error(&self, error: impl AsRef<str>) {
         *self.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(redact(error.as_ref()));
+    }
+
+    /// 统计当前日志目录总字节数。
+    pub fn log_dir_size_bytes(&self) -> u64 {
+        fs::read_dir(&self.log_dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(|m| m.is_file())
+            .map(|m| m.len())
+            .sum()
     }
 
     /// 构造可公开复制的诊断摘要。
@@ -56,6 +75,8 @@ impl DiagnosticsState {
             run_id: self.run_id.clone(),
             phase: self.phase.lock().unwrap_or_else(|e| e.into_inner()).clone(),
             duration_ms: self.started_at.elapsed().as_millis(),
+            port: *self.port.lock().unwrap_or_else(|e| e.into_inner()),
+            log_dir_size_bytes: self.log_dir_size_bytes(),
             error_summary: self
                 .last_error
                 .lock()
@@ -76,6 +97,8 @@ pub struct DiagnosticSummary {
     pub run_id: String,
     pub phase: String,
     pub duration_ms: u128,
+    pub port: Option<u16>,
+    pub log_dir_size_bytes: u64,
     pub error_summary: Option<String>,
     pub log_path: String,
 }
@@ -158,6 +181,14 @@ pub fn enforce_log_retention(log_dir: &Path) {
 /// 返回当前诊断摘要。
 #[tauri::command]
 pub fn get_diagnostics_summary(
+    state: State<'_, DiagnosticsState>,
+    app: tauri::AppHandle,
+) -> DiagnosticSummary {
+    state.summary(&app.package_info().version.to_string())
+}
+
+#[tauri::command]
+pub fn get_diagnostic_summary(
     state: State<'_, DiagnosticsState>,
     app: tauri::AppHandle,
 ) -> DiagnosticSummary {
@@ -309,6 +340,13 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateStatus, Str
     })
 }
 
+/// 重启整个桌面应用程序（含重新拉起 Node Sidecar）。
+#[tauri::command]
+pub async fn restart_application(app: tauri::AppHandle) -> Result<(), String> {
+    app.request_restart();
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,6 +413,22 @@ mod tests {
         assert!(!combined.contains("secret-token"));
         assert!(!combined.contains("secret-value"));
         drop(archive);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn summary_includes_port_and_log_size() {
+        let dir =
+            std::env::temp_dir().join(format!("harness-summary-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("test.log"), "hello diagnostics").unwrap();
+        let state = DiagnosticsState::new("test-run-123".into(), dir.clone());
+        state.set_port(54321);
+        let summary = state.summary("0.1.4");
+        assert_eq!(summary.port, Some(54321));
+        assert!(summary.log_dir_size_bytes > 0);
+        assert_eq!(summary.app_version, "0.1.4");
+        assert_eq!(summary.run_id, "test-run-123");
         fs::remove_dir_all(dir).unwrap();
     }
 }
