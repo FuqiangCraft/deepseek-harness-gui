@@ -240,6 +240,128 @@
         gap: 8px;
       }
 
+      /* 启动页诊断入口：固定在视觉边缘，避免打断品牌与启动状态的主层级。 */
+      .diagnostics-fab {
+        position: fixed;
+        right: 20px;
+        bottom: 18px;
+        z-index: 20;
+      }
+
+      .diagnostics-trigger {
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 13px;
+        border: 1px solid rgba(148, 163, 184, 0.42);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        backdrop-filter: blur(10px);
+        transition: color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+      }
+
+      .diagnostics-trigger:hover,
+      .diagnostics-trigger[aria-expanded="true"] {
+        color: var(--accent-blue);
+        border-color: #bfdbfe;
+        box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12);
+        transform: translateY(-1px);
+      }
+
+      .diagnostics-trigger:focus-visible,
+      .diagnostics-menu-button:focus-visible {
+        outline: 2px solid #93c5fd;
+        outline-offset: 2px;
+      }
+
+      .diagnostics-popover {
+        position: absolute;
+        right: 0;
+        bottom: 48px;
+        width: 224px;
+        padding: 8px;
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.97);
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.13);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(6px) scale(0.98);
+        transform-origin: bottom right;
+        transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+        backdrop-filter: blur(14px);
+      }
+
+      .diagnostics-fab.is-open .diagnostics-popover {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+      }
+
+      .diagnostics-popover-title {
+        padding: 6px 9px 7px;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+
+      .diagnostics-menu-button {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-primary);
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .diagnostics-menu-button:hover {
+        background: #f1f5f9;
+      }
+
+      .diagnostics-menu-button svg {
+        flex: 0 0 auto;
+        color: var(--text-secondary);
+      }
+
+      .diagnostics-status {
+        min-height: 18px;
+        padding: 5px 9px 2px;
+        color: var(--text-secondary);
+        font-size: 10px;
+        line-height: 1.35;
+        word-break: break-word;
+      }
+
+      @media (max-width: 520px) {
+        .diagnostics-fab {
+          right: 14px;
+          bottom: 14px;
+        }
+
+        .diagnostics-trigger span {
+          display: none;
+        }
+
+        .diagnostics-trigger {
+          width: 38px;
+          padding: 0;
+          justify-content: center;
+        }
+      }
+
       @keyframes spin {
         to {
           transform: rotate(360deg);
@@ -346,6 +468,37 @@
       </div>
     </div>
 
+    <div class="diagnostics-fab" id="diagnostics-fab">
+      <div class="diagnostics-popover" id="diagnostics-popover" role="menu" aria-label="启动诊断">
+        <div class="diagnostics-popover-title">启动诊断</div>
+        <button class="diagnostics-menu-button" id="fab-open-logs" type="button" role="menuitem">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 2h11v10H3z"></path><path d="M3 7V5h6l2 2"></path></svg>
+          打开日志目录
+        </button>
+        <button class="diagnostics-menu-button" id="fab-export-diagnostics" type="button" role="menuitem">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+          导出诊断包
+        </button>
+        <button class="diagnostics-menu-button" id="fab-copy-diagnostics" type="button" role="menuitem">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>
+          复制诊断摘要
+        </button>
+        <button class="diagnostics-menu-button" id="fab-check-update" type="button" role="menuitem">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.34-5.66"></path><path d="M20 4v6h-6"></path></svg>
+          检查更新
+        </button>
+        <button class="diagnostics-menu-button" id="fab-show-version" type="button" role="menuitem">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path></svg>
+          查看版本
+        </button>
+        <div class="diagnostics-status" id="diagnostics-status" aria-live="polite"></div>
+      </div>
+      <button class="diagnostics-trigger" id="diagnostics-trigger" type="button" aria-expanded="false" aria-controls="diagnostics-popover" aria-label="打开启动诊断">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+        <span>诊断</span>
+      </button>
+    </div>
+
     <script type="module">
       import { listen } from "@tauri-apps/api/event";
       import { invoke } from "@tauri-apps/api/core";
@@ -355,6 +508,80 @@
       const loadingBox = document.getElementById("loading-box");
       const errorBox = document.getElementById("error-box");
       const errorMessage = document.getElementById("error-message");
+      const diagnosticsFab = document.getElementById("diagnostics-fab");
+      const diagnosticsTrigger = document.getElementById("diagnostics-trigger");
+      const diagnosticsStatus = document.getElementById("diagnostics-status");
+
+      /**
+       * 在诊断弹层底部显示最近一次操作结果。
+       *
+       * @param {string} text - 需要展示的状态文本。
+       * @param {boolean} [isError=false] - 是否使用错误状态颜色。
+       */
+      function setDiagnosticsStatus(text, isError = false) {
+        if (!diagnosticsStatus) return;
+        diagnosticsStatus.textContent = text;
+        diagnosticsStatus.style.color = isError ? "#b91c1c" : "";
+        diagnosticsFab?.classList.add("is-open");
+        diagnosticsTrigger?.setAttribute("aria-expanded", "true");
+      }
+
+      /** 收起诊断弹层并同步无障碍展开状态。 */
+      function closeDiagnostics() {
+        diagnosticsFab?.classList.remove("is-open");
+        diagnosticsTrigger?.setAttribute("aria-expanded", "false");
+      }
+
+      /** 打开本次应用运行所使用的本地日志目录。 */
+      async function openLogs() {
+        try {
+          await invoke("open_log_directory");
+          setDiagnosticsStatus("已打开日志目录");
+        } catch (error) {
+          setDiagnosticsStatus(String(error), true);
+        }
+      }
+
+      /** 导出经过脱敏处理的本地诊断包。 */
+      async function exportDiagnostics() {
+        try {
+          const path = await invoke("export_diagnostics_default");
+          setDiagnosticsStatus(`已导出：${path}`);
+        } catch (error) {
+          setDiagnosticsStatus(String(error), true);
+        }
+      }
+
+      /** 将经过脱敏处理的诊断摘要复制到系统剪贴板。 */
+      async function copyDiagnostics() {
+        try {
+          await invoke("copy_diagnostics_summary");
+          setDiagnosticsStatus("诊断摘要已复制");
+        } catch (error) {
+          setDiagnosticsStatus(String(error), true);
+        }
+      }
+
+      /** 触发签名更新检查，并在发现新版本时显示原生确认窗口。 */
+      async function checkForUpdate() {
+        setDiagnosticsStatus("正在检查更新…");
+        try {
+          await invoke("manual_check_for_update");
+          setDiagnosticsStatus("更新检查已完成");
+        } catch (error) {
+          setDiagnosticsStatus(String(error), true);
+        }
+      }
+
+      /** 读取并展示当前应用版本及本次运行编号。 */
+      async function showVersion() {
+        try {
+          const summary = await invoke("get_diagnostics_summary");
+          setDiagnosticsStatus(`v${summary.appVersion} · ${summary.runId}`);
+        } catch (error) {
+          setDiagnosticsStatus(String(error), true);
+        }
+      }
 
       // 平滑更新提示文字
       function updateHint(text) {
@@ -400,22 +627,26 @@
       document.getElementById("btn-retry")?.addEventListener("click", () => {
         location.reload();
       });
-      document.getElementById("btn-open-logs")?.addEventListener("click", () => {
-        invoke("open_log_directory").catch((error) => showError(String(error)));
+      document.getElementById("btn-open-logs")?.addEventListener("click", openLogs);
+      document.getElementById("btn-export-diagnostics")?.addEventListener("click", exportDiagnostics);
+      document.getElementById("btn-copy-error")?.addEventListener("click", copyDiagnostics);
+      document.getElementById("fab-open-logs")?.addEventListener("click", openLogs);
+      document.getElementById("fab-export-diagnostics")?.addEventListener("click", exportDiagnostics);
+      document.getElementById("fab-copy-diagnostics")?.addEventListener("click", copyDiagnostics);
+      document.getElementById("fab-check-update")?.addEventListener("click", checkForUpdate);
+      document.getElementById("fab-show-version")?.addEventListener("click", showVersion);
+      diagnosticsTrigger?.addEventListener("click", () => {
+        const isOpen = diagnosticsFab?.classList.toggle("is-open") ?? false;
+        diagnosticsTrigger.setAttribute("aria-expanded", String(isOpen));
+        if (isOpen) document.getElementById("fab-open-logs")?.focus();
       });
-      document.getElementById("btn-export-diagnostics")?.addEventListener("click", async () => {
-        try {
-          const path = await invoke("export_diagnostics_default");
-          alert(`诊断包已导出到：\n${path}`);
-        } catch (error) {
-          showError(String(error));
-        }
+      document.addEventListener("click", (event) => {
+        if (diagnosticsFab && !diagnosticsFab.contains(event.target)) closeDiagnostics();
       });
-      document.getElementById("btn-copy-error")?.addEventListener("click", async () => {
-        try {
-          await invoke("copy_diagnostics_summary");
-        } catch (error) {
-          showError(String(error));
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeDiagnostics();
+          diagnosticsTrigger?.focus();
         }
       });
 

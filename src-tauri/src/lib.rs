@@ -135,6 +135,66 @@ async fn prompt_for_update(app: tauri::AppHandle, quiet_when_current: bool) {
     }
 }
 
+/// 从 WebView 入口触发带用户确认的手动更新检查。
+#[tauri::command]
+async fn manual_check_for_update(app: tauri::AppHandle) {
+    prompt_for_update(app, false).await;
+}
+
+/// 处理托盘诊断菜单动作，确保主 WebView 导航后仍可访问诊断能力。
+fn handle_diagnostics_menu(app: &tauri::AppHandle, id: &str) {
+    let state = app.state::<diagnostics::DiagnosticsState>();
+    match id {
+        "diagnostics_open_logs" => {
+            let _ = diagnostics::open_log_directory_path(&state.log_dir);
+        }
+        "diagnostics_export" => {
+            let destination = state
+                .log_dir
+                .join(format!("diagnostics-{}.zip", state.run_id));
+            match diagnostics::export_diagnostics_to(
+                &destination,
+                state.inner(),
+                &app.package_info().version.to_string(),
+            ) {
+                Ok(path) => app
+                    .dialog()
+                    .message(format!("诊断包已导出到：\n{path}"))
+                    .title("导出完成")
+                    .show(|_| {}),
+                Err(error) => app
+                    .dialog()
+                    .message(format!("导出失败：{error}"))
+                    .title("导出失败")
+                    .show(|_| {}),
+            }
+        }
+        "diagnostics_copy" => {
+            if let Ok(summary) = serde_json::to_string_pretty(
+                &state.summary(&app.package_info().version.to_string()),
+            ) {
+                let _ = app.clipboard().write_text(summary);
+            }
+        }
+        "updater_check" => {
+            let handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                prompt_for_update(handle, false).await;
+            });
+        }
+        "diagnostics_version" => app
+            .dialog()
+            .message(format!(
+                "DeepSeek Harness {}\nrun_id: {}",
+                app.package_info().version,
+                state.run_id
+            ))
+            .title("版本信息")
+            .show(|_| {}),
+        _ => {}
+    }
+}
+
 /// 从 tar.gz 归档解压 sidecar 到目标目录。
 /// 使用 `unpack_in` 防止路径穿越（仅信任随包自带的归档，防御性加固）。
 /// `+ Send + Sync` 以满足在 `spawn_blocking` 中执行的要求。
@@ -239,20 +299,61 @@ pub fn run() {
             diagnostics::open_log_directory,
             diagnostics::export_diagnostics,
             diagnostics::export_diagnostics_default,
-            diagnostics::check_for_update
+            diagnostics::check_for_update,
+            manual_check_for_update
         ])
         .setup(|app| {
-            use tauri::menu::{Menu, MenuItem, Submenu};
-            let open_logs = MenuItem::with_id(app, "diagnostics_open_logs", "打开日志目录", true, None::<&str>)?;
-            let export = MenuItem::with_id(app, "diagnostics_export", "导出诊断包", true, None::<&str>)?;
-            let copy = MenuItem::with_id(app, "diagnostics_copy", "复制诊断摘要", true, None::<&str>)?;
-            let update = MenuItem::with_id(app, "updater_check", "检查更新", true, None::<&str>)?;
-            let version = MenuItem::with_id(app, "diagnostics_version", "查看版本", true, None::<&str>)?;
-            let help = Submenu::with_items(app, "帮助与诊断", true, &[&open_logs, &export, &copy, &update, &version])?;
-            app.set_menu(Menu::with_items(app, &[&help])?)?;
             let run_id = uuid::Uuid::new_v4().to_string();
             let log_dir = init_logging(app, &run_id);
             app.manage(diagnostics::DiagnosticsState::new(run_id.clone(), log_dir.clone()));
+
+            // 托盘菜单不占用窗口内容区域，并在 WebView 导航后持续提供诊断入口。
+            use tauri::menu::{Menu, MenuItem};
+            use tauri::tray::TrayIconBuilder;
+            let open_logs = MenuItem::with_id(
+                app,
+                "diagnostics_open_logs",
+                "打开日志目录",
+                true,
+                None::<&str>,
+            )?;
+            let export = MenuItem::with_id(
+                app,
+                "diagnostics_export",
+                "导出诊断包",
+                true,
+                None::<&str>,
+            )?;
+            let copy = MenuItem::with_id(
+                app,
+                "diagnostics_copy",
+                "复制诊断摘要",
+                true,
+                None::<&str>,
+            )?;
+            let update =
+                MenuItem::with_id(app, "updater_check", "检查更新", true, None::<&str>)?;
+            let version = MenuItem::with_id(
+                app,
+                "diagnostics_version",
+                "查看版本",
+                true,
+                None::<&str>,
+            )?;
+            let tray_menu =
+                Menu::with_items(app, &[&open_logs, &export, &copy, &update, &version])?;
+            let mut tray = TrayIconBuilder::new()
+                .tooltip("DeepSeek Harness · 帮助与诊断")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    handle_diagnostics_menu(app, event.id().as_ref());
+                });
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tray = tray.icon(icon);
+            }
+            tray.build(app)?;
+
             let panic_run_id = run_id.clone();
             std::panic::set_hook(Box::new(move |info| {
                 tracing::error!(run_id = %panic_run_id, component = "host", phase = "panic", error_chain = %info, "rust_panic");
@@ -462,32 +563,6 @@ pub fn run() {
             }.instrument(startup_span));
 
             Ok(())
-        })
-        .on_menu_event(|app, event| {
-            let id = event.id().as_ref();
-            let state = app.state::<diagnostics::DiagnosticsState>();
-            match id {
-                "diagnostics_open_logs" => { let _ = diagnostics::open_log_directory_path(&state.log_dir); }
-                "diagnostics_export" => {
-                    let destination = state.log_dir.join(format!("diagnostics-{}.zip", state.run_id));
-                    match diagnostics::export_diagnostics_to(&destination, state.inner(), &app.package_info().version.to_string()) {
-                        Ok(path) => app.dialog().message(format!("诊断包已导出到：\n{path}")) .title("导出完成").show(|_| {}),
-                        Err(error) => app.dialog().message(format!("导出失败：{error}")) .title("导出失败").show(|_| {}),
-                    }
-                }
-                "diagnostics_copy" => {
-                    if let Ok(summary) = serde_json::to_string_pretty(&state.summary(&app.package_info().version.to_string())) {
-                        let _ = app.clipboard().write_text(summary);
-                    }
-                }
-                "updater_check" => {
-                    let handle = app.clone();
-                    tauri::async_runtime::spawn(async move { prompt_for_update(handle, false).await; });
-                }
-                "diagnostics_version" => app.dialog().message(format!("DeepSeek Harness {}\nrun_id: {}", app.package_info().version, state.run_id))
-                    .title("版本信息").show(|_| {}),
-                _ => {}
-            }
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
