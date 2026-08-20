@@ -20,6 +20,12 @@ const stagingSidecarDir = path.join(resourceDir, "sidecar");
 const targetArchive = path.join(resourceDir, "sidecar.tar.gz");
 const targetNodeDir = path.join(resourceDir, "node");
 
+const isWindows = process.platform === "win32";
+// Windows 上 Git for Windows 会把 GNU tar 放进 PATH 且优先于系统自带 bsdtar，
+// GNU tar 无法正确处理本脚本的归档参数（报 "Cannot connect to D:"），
+// 因此显式使用 Windows 自带的 bsdtar（System32\tar.exe），与 CI 环境行为一致。
+const tarBin = isWindows ? "C:\\Windows\\System32\\tar.exe" : "tar";
+
 /** 递归计算目录总字节数 */
 function dirSize(dir) {
   let total = 0;
@@ -82,18 +88,22 @@ console.log(`[bundle] 已验证关键启动依赖: ${resolvedBootPackage}`);
 
 console.log("[bundle] 4. 压缩 sidecar 为单归档 sidecar.tar.gz（排除非运行时文件，文件数约减半）...");
 // 排除 .d.ts/.map/README/LICENSE/CHANGELOG/test 等运行时不需要的文件，缩短首启解压时间。
-execSync(
-  `tar -czf sidecar.tar.gz -C sidecar ` +
-    `--exclude='*/test/*' --exclude='*/tests/*' --exclude='*/__tests__/*' ` +
-    `--exclude='*.test.js' --exclude='*.spec.js' --exclude='*.d.ts' --exclude='*.map' ` +
-    `--exclude='README*' --exclude='LICENSE*' --exclude='CHANGELOG*' ` +
-    `dist node_modules package.json`,
+// 用 execFileSync 直接传参：不经 shell，避免 GNU tar 的 `D:` 远程解析与引号转义问题。
+execFileSync(
+  tarBin,
+  [
+    "-czf", "sidecar.tar.gz", "-C", "sidecar",
+    "--exclude=*/test/*", "--exclude=*/tests/*", "--exclude=*/__tests__/*",
+    "--exclude=*.test.js", "--exclude=*.spec.js", "--exclude=*.d.ts", "--exclude=*.map",
+    "--exclude=README*", "--exclude=LICENSE*", "--exclude=CHANGELOG*",
+    "dist", "node_modules", "package.json",
+  ],
   { cwd: resourceDir, stdio: "inherit" }
 );
 
 // 验证最终归档，而不只验证归档前的暂存目录。
 const archiveCheckDir = fs.mkdtempSync(path.join(os.tmpdir(), "harness-sidecar-archive-check-"));
-execFileSync("tar", ["-xzf", targetArchive, "-C", archiveCheckDir], { stdio: "inherit" });
+execFileSync(tarBin, ["-xzf", targetArchive, "-C", archiveCheckDir], { stdio: "inherit" });
 const archivedBootPackage = resolveBootPackage(archiveCheckDir);
 console.log(`[bundle] 已验证最终归档依赖: ${archivedBootPackage}`);
 fs.rmSync(archiveCheckDir, { recursive: true, force: true });
@@ -105,7 +115,6 @@ console.log(`[bundle] 5. 删除裸 sidecar 目录（仅保留归档 ${archiveMb}
 fs.rmSync(stagingSidecarDir, { recursive: true, force: true });
 
 console.log("[bundle] 6. 复制独立 Node 运行时（可用 NODE_EXE_PATH 覆盖）...");
-const isWindows = process.platform === "win32";
 const nodeBinaryName = isWindows ? "node.exe" : "node";
 const targetNodePath = path.join(targetNodeDir, nodeBinaryName);
 const nodeSrc = process.env.NODE_EXE_PATH || process.execPath;
