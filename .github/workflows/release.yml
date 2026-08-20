@@ -57,36 +57,53 @@ jobs:
       - name: Build Frontend and Bundle Sidecar
         run: npm run build:all
 
-      - name: Build Tauri Desktop and Publish Release
-        uses: tauri-apps/tauri-action@v0
+      - name: Configure code signing (only when secrets are provided)
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS 签名 + notarize（secrets 未配置时 tauri-action 自动跳过，不影响 unsigned 发布）
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Windows 代码签名（secrets 未配置时自动跳过）
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          # tauri-bundler reads these env vars for signing; an empty value is treated
+          # as "configured" and triggers an empty-certificate import, so only export
+          # non-empty secrets to GITHUB_ENV for the subsequent tauri build process.
+          if [ -n "${APPLE_CERTIFICATE:-}" ]; then
+            echo "APPLE_CERTIFICATE=${APPLE_CERTIFICATE}" >> "$GITHUB_ENV"
+            echo "APPLE_CERTIFICATE_PASSWORD=${APPLE_CERTIFICATE_PASSWORD}" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=${APPLE_SIGNING_IDENTITY}" >> "$GITHUB_ENV"
+            echo "APPLE_ID=${APPLE_ID}" >> "$GITHUB_ENV"
+            echo "APPLE_PASSWORD=${APPLE_PASSWORD}" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=${APPLE_TEAM_ID}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${WINDOWS_CERTIFICATE:-}" ]; then
+            echo "WINDOWS_CERTIFICATE=${WINDOWS_CERTIFICATE}" >> "$GITHUB_ENV"
+            echo "WINDOWS_CERTIFICATE_PASSWORD=${WINDOWS_CERTIFICATE_PASSWORD}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Tauri Desktop and Publish Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "DeepSeek Harness Desktop ${{ github.ref_name }}"
           releaseBody: |
-            **DeepSeek Harness Desktop** — 基于 Tauri 2.0 + 官方 DeepSeek Harness (dsh) 引擎的跨平台桌面客户端。
+            **DeepSeek Harness Desktop** - a cross-platform desktop client for the official DeepSeek Harness (dsh) engine, built on Tauri 2.0.
 
-            ## 平台
-            - 🪟 Windows x64 (NSIS)
-            - 🍎 macOS (Apple Silicon / Intel, DMG)
-            - 🐧 Linux (AppImage / deb)
+            ## Platforms
+            - Windows x64 (NSIS / MSI)
+            - macOS (Apple Silicon / Intel, DMG)
+            - Linux (AppImage / deb / rpm)
 
-            ## 安装
-            下载对应平台安装包即可，无需预装 Node.js 或 Rust。首次启动自动解压引擎组件。
+            ## Install
+            Download the installer for your platform. No Node.js or Rust installation is required; the engine is extracted automatically on first launch.
 
-            > 未签名发布版会触发 Windows SmartScreen / macOS Gatekeeper 提示，属正常现象。
-            > 安全模型与漏洞上报见 [SECURITY.md](https://github.com/FuQiangChen/harness-agent/blob/main/SECURITY.md)。
+            > Unsigned builds may trigger Windows SmartScreen / macOS Gatekeeper prompts. See SECURITY.md for the security model and for reporting issues.
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
