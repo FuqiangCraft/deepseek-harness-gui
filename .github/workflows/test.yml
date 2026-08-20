@@ -41,11 +41,8 @@ jobs:
           npm install
           cd sidecar && pnpm install --frozen-lockfile && cd ..
 
-      - name: Build frontend
-        run: npm run build
-
-      - name: Build sidecar
-        run: npm run --prefix sidecar build
+      - name: Build frontend and bundle sidecar
+        run: npm run build:all
 
       - name: Run Rust unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
