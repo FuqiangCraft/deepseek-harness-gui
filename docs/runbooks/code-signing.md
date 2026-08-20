@@ -5,7 +5,7 @@
 
 # 代码签名与公证操作手册
 
-未签名的安装包会触发 **Windows SmartScreen** 与 **macOS Gatekeeper** 拦截（用户需"仍要运行"）。签名后两类警告消除。本手册覆盖 CI 工作流 `release.yml` 的签名配置：签名证书由 **tauri-bundler** 从环境变量读取（见下文 secrets 表），工作流只把这些变量导出到环境（secret 为空时不会导出，从而跳过签名）。**未配置 secrets 时发布照常进行但跳过签名。**
+未签名的安装包会触发 **Windows SmartScreen** 与 **macOS Gatekeeper** 拦截。稳定版工作流会强制检查全部签名、公证与 updater 密钥；任一凭据缺失即停止发布。Windows PFX 会临时导入 runner 的当前用户证书库并把 thumbprint 注入 Tauri 配置，任务结束后 runner 被销毁。
 
 ---
 
@@ -85,6 +85,9 @@ PowerShell：
 |---|---|
 | `WINDOWS_CERTIFICATE` | .pfx 的 base64 内容 |
 | `WINDOWS_CERTIFICATE_PASSWORD` | .pfx 导出密码 |
+| `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater 独立私钥 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | updater 私钥密码 |
+| `TAURI_UPDATER_PUBLIC_KEY` | 与 updater 私钥配对的公钥 |
 
 ### 2.4 发布后验证
 - 右键 `*-setup.exe` → 属性 → **数字签名** 选项卡 → 显示签名者与时间戳。

@@ -44,3 +44,10 @@ This client ships with a deliberately thin attack surface:
   active development and may ship breaking changes between `0.1.x` builds.
 - The loopback web server grants local processes the ability to drive the agent.
   Only run this software on machines you trust.
+- Diagnostic logs are local-only, retained for at most 14 days and 100 MiB, and
+  are never uploaded automatically. Diagnostic exports exclude `~/.dsh`, user
+  sessions, prompts, attachments, and workspace files. Users should still
+  inspect an exported archive before sharing it.
+- Stable updates are accepted only after Tauri signature verification. Windows
+  and macOS stable installers must also pass platform code-signing and macOS
+  notarization checks in the release workflow.

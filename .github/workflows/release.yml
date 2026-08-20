@@ -16,12 +16,16 @@ jobs:
         include:
           - platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
+            bundles: "nsis"
           - platform: "macos-latest"
             target: "aarch64-apple-darwin"
+            bundles: "dmg"
           - platform: "macos-13"
             target: "x86_64-apple-darwin"
+            bundles: "dmg"
           - platform: "ubuntu-22.04"
             target: "x86_64-unknown-linux-gnu"
+            bundles: "appimage,deb"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -47,15 +51,21 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential curl wget file
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential curl wget file xvfb
 
       - name: Install dependencies
         run: |
-          npm install
+          npm ci
           cd sidecar && pnpm install --frozen-lockfile && cd ..
+
+      - name: Verify third-party licenses
+        run: npm run licenses:check
 
       - name: Build Frontend and Bundle Sidecar
         run: npm run build:all
+
+      - name: Verify bundled runtime resources
+        run: npm run bundle:verify
 
       - name: Configure code signing (only when secrets are provided)
         shell: bash
@@ -68,7 +78,22 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || [ -z "${TAURI_UPDATER_PUBLIC_KEY:-}" ]; then
+            echo "Stable release requires Tauri updater signing and public keys" >&2
+            exit 1
+          fi
+          if [ "${RUNNER_OS}" = "macOS" ] && { [ -z "${APPLE_CERTIFICATE:-}" ] || [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; }; then
+            echo "Stable macOS release requires signing and notarization credentials" >&2
+            exit 1
+          fi
+          if [ "${RUNNER_OS}" = "Windows" ] && [ -z "${WINDOWS_CERTIFICATE:-}" ]; then
+            echo "Stable Windows release requires a code-signing certificate" >&2
+            exit 1
+          fi
           # tauri-bundler reads these env vars for signing; an empty value is treated
           # as "configured" and triggers an empty-certificate import, so only export
           # non-empty secrets to GITHUB_ENV for the subsequent tauri build process.
@@ -84,6 +109,35 @@ jobs:
             echo "WINDOWS_CERTIFICATE=${WINDOWS_CERTIFICATE}" >> "$GITHUB_ENV"
             echo "WINDOWS_CERTIFICATE_PASSWORD=${WINDOWS_CERTIFICATE_PASSWORD}" >> "$GITHUB_ENV"
           fi
+          {
+            echo 'TAURI_SIGNING_PRIVATE_KEY<<TAURI_KEY_EOF'
+            echo "${TAURI_SIGNING_PRIVATE_KEY}"
+            echo 'TAURI_KEY_EOF'
+          } >> "$GITHUB_ENV"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}" >> "$GITHUB_ENV"
+          {
+            echo 'TAURI_UPDATER_PUBLIC_KEY<<TAURI_PUB_EOF'
+            echo "${TAURI_UPDATER_PUBLIC_KEY}"
+            echo 'TAURI_PUB_EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Import Windows code-signing certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $securePassword = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
+          if (-not $certificate.Thumbprint) { throw 'Failed to import Windows signing certificate' }
+          "TAURI_WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Remove-Item -LiteralPath $pfxPath -Force
+
+      - name: Configure release signing and updater public key
+        run: node scripts/configure-release.js
 
       - name: Build Tauri Desktop and Publish Release
         uses: tauri-apps/tauri-action@v0
@@ -104,6 +158,82 @@ jobs:
             Download the installer for your platform. No Node.js or Rust installation is required; the engine is extracted automatically on first launch.
 
             > Unsigned builds may trigger Windows SmartScreen / macOS Gatekeeper prompts. See SECURITY.md for the security model and for reporting issues.
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Verify Windows Authenticode signature
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binary = "src-tauri/target/${{ matrix.target }}/release/harness-desktop.exe"
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary
+          if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature: $($signature.Status)" }
+
+      - name: Verify macOS signature and notarization
+        if: runner.os == 'macOS'
+        run: |
+          APP_PATH=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -name '*.app' -maxdepth 2 -print -quit)
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          spctl --assess --type execute --verbose=2 "$APP_PATH"
+
+      - name: Install and smoke test Windows NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/nsis" -Filter '*setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer not found' }
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $installed = Get-ChildItem "$env:LOCALAPPDATA\DeepSeek Harness" -Recurse -Filter '*.exe' | Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1
+          if (-not $installed) { throw 'Installed application executable not found' }
+          $env:HARNESS_SMOKE_EXECUTABLE = $installed.FullName
+          node scripts/smoke-desktop.js
+          $uninstaller = Get-ChildItem "$env:LOCALAPPDATA\DeepSeek Harness" -Recurse -Filter '*uninstall*.exe' | Select-Object -First 1
+          if ($uninstaller) { Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait }
+          Start-Sleep -Seconds 3
+          if (Test-Path "$env:LOCALAPPDATA\DeepSeek Harness") { throw 'NSIS uninstall left application files behind' }
+
+      - name: Install and smoke test macOS DMG
+        if: runner.os == 'macOS'
+        run: |
+          DMG=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name '*.dmg' -print -quit)
+          MOUNT=$(mktemp -d)
+          hdiutil attach "$DMG" -mountpoint "$MOUNT" -nobrowse
+          APP=$(find "$MOUNT" -maxdepth 1 -name '*.app' -print -quit)
+          cp -R "$APP" "$RUNNER_TEMP/DeepSeek Harness.app"
+          hdiutil detach "$MOUNT"
+          export HARNESS_SMOKE_EXECUTABLE="$RUNNER_TEMP/DeepSeek Harness.app/Contents/MacOS/harness-desktop"
+          node scripts/smoke-desktop.js
+          rm -rf "$RUNNER_TEMP/DeepSeek Harness.app"
+
+      - name: Install and smoke test Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          APPIMAGE=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/appimage" -name '*.AppImage' -print -quit)
+          chmod +x "$APPIMAGE"
+          HARNESS_SMOKE_EXECUTABLE="$APPIMAGE" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
+          mv startup-performance.json startup-performance-appimage.json
+          DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name '*.deb' -print -quit)
+          sudo apt-get install -y "$DEB"
+          HARNESS_SMOKE_EXECUTABLE="$(command -v harness-desktop)" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
+          mv startup-performance.json startup-performance-deb.json
+          sudo apt-get remove -y harness-desktop
+
+      - name: Upload release verification reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-verification-${{ matrix.target }}
+          path: |
+            bundle-size-report.json
+            startup-performance*.json
+
+  publish-release:
+    needs: build-and-release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish verified draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false --repo "${GITHUB_REPOSITORY}"
