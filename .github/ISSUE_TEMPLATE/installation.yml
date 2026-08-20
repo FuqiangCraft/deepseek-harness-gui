@@ -1,0 +1,26 @@
+name: Installation problem
+description: Report installation, first-launch, upgrade, or uninstall failures
+title: "[Install]: "
+labels: ["installation"]
+body:
+  - type: markdown
+    attributes:
+      value: "请附安装包格式和脱敏诊断摘要，不要提交密钥或用户会话。"
+  - type: input
+    id: version
+    attributes: { label: Version and package format }
+    validations: { required: true }
+  - type: input
+    id: os
+    attributes: { label: Operating system and architecture }
+    validations: { required: true }
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Failure phase
+      options: ["Install", "First launch", "Second launch", "Upgrade", "Uninstall"]
+    validations: { required: true }
+  - type: textarea
+    id: details
+    attributes: { label: Details and redacted diagnostic summary }
+    validations: { required: true }

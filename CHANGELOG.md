@@ -1,0 +1,21 @@
+# Changelog
+
+本项目遵循 Keep a Changelog，并在稳定发布后遵循语义化版本。
+
+## [Unreleased]
+
+### Added
+
+- 开源社区规范、可重复工具链和许可证门禁。
+- 本地结构化日志、诊断导出、启动性能指标与签名自动更新基础设施。
+
+### Changed
+
+- 正式安装包限定为 Windows NSIS、macOS DMG、Linux AppImage 与 deb。
+- 应用标识改为 `io.github.fuqiangchen.harness-agent`。
+
+## [0.1.4] - 2026-08-19
+
+### Added
+
+- Tauri 桌面宿主与内置 DeepSeek Harness Sidecar。

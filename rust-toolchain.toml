@@ -1,0 +1,5 @@
+# 文件说明: 固定桌面宿主构建使用的 Rust 稳定工具链与基础组件。
+[toolchain]
+channel = "1.89.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
