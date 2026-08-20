@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible application problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "请勿粘贴 API Key、提示词、会话内容或未经检查的完整日志。"
+  - type: input
+    id: version
+    attributes: { label: Version }
+    validations: { required: true }
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: ["Windows 10/11 x64", "macOS Intel", "macOS Apple Silicon", "Linux AppImage", "Linux deb"]
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Reproduction steps }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Expected behavior }
+    validations: { required: true }
+  - type: textarea
+    id: diagnostic
+    attributes: { label: Redacted diagnostic summary }

@@ -2,6 +2,7 @@
   "name": "harness-sidecar",
   "version": "0.1.4",
   "license": "MIT",
+  "packageManager": "pnpm@11.9.0",
   "private": true,
   "type": "module",
   "engines": {
