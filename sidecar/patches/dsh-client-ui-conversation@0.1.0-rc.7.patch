@@ -1,0 +1,37 @@
+diff --git a/lib/client.js b/lib/client.js
+index 1dd0e89e7b91ba87610fafe5b7df8693d7485333..c911b8bbf11db858d6b1fc40b33b4e237393ddd4 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -3278,6 +3278,15 @@ window.__ModuleLoader__.load({
+ 			return identity.vendor === "Apple Computer, Inc." && /\bVersion\/[\d.]+.*\bSafari\/[\d.]+/.test(identity.userAgent) && !ALTERNATE_IOS_BROWSER.test(identity.userAgent);
+ 		}
+ 		/**
++		* Detect WebKitGTK (Linux Tauri webview). Its IME reports input-method keys as
++		* keyCode 229 even when no preedit is active, so a bare 229 must not count.
++		* @param identity - Browser user-agent and vendor values.
++		* @returns Whether the identity is a WebKitGTK webview.
++		*/
++		function isWebKitGtk(identity) {
++			return identity.vendor === "Apple Computer, Inc." && /\(X11; Linux/.test(identity.userAgent) && /\bAppleWebKit\/[\d.]+/.test(identity.userAgent);
++		}
++		/**
+ 		* Repair Safari's stale native textarea layout and the scrollport auto height it can contaminate.
+ 		* @param input - Composer textarea whose own scrollable overflow must stay zero.
+ 		*/
+@@ -3401,6 +3410,7 @@ window.__ModuleLoader__.load({
+ 			const scrollRef = (0, react.useRef)(null);
+ 			const mirrorRef = (0, react.useRef)(null);
+ 			const safari = (0, react.useMemo)(() => isSafariBrowser(navigator), []);
++			const webkitGtk = (0, react.useMemo)(() => isWebKitGtk(navigator), []);
+ 			const safariNativeShrinkRef = (0, react.useRef)(false);
+ 			const composingRef = (0, react.useRef)(false);
+ 			const onCompositionStart = () => {
+@@ -3502,7 +3512,7 @@ window.__ModuleLoader__.load({
+ 				}
+ 				if (keyboard === void 0 || inputActions === void 0) return;
+ 				if (e.key === "Enter" && e.shiftKey) return;
+-				const composing = composingRef.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229;
++				const composing = composingRef.current || e.nativeEvent.isComposing || (!webkitGtk && e.nativeEvent.keyCode === 229);
+ 				if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+ 					if (keyboard.arbitrate(e.key === "ArrowUp" ? "up" : "down", composing) === "consumed") e.preventDefault();
+ 					return;
