@@ -28,6 +28,10 @@ src-tauri/resources/
 # Logs
 logs/
 *.log
+bundle-size-report.json
+startup-performance*.json
+sidecar.extracting-*/
+sidecar.backup-*/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
