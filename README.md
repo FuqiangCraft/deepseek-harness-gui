@@ -141,8 +141,8 @@ npx tauri build
 
 ```bash
 # 打上版本 Tag 并推送到 GitHub，自动触发 Windows、macOS (Apple Silicon/Intel)、Linux 云端构建
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 构建完成后，GitHub Releases 将自动生成并挂载各平台安装包供直接下载。
