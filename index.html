@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DeepSeek Harness</title>
+    <title>DeepSeek Harness GUI</title>
     <style>
       :root {
         color-scheme: light;
@@ -817,7 +817,7 @@
           </svg>
         </div>
         <div class="logo-title">
-          <span>DeepSeek Harness</span>
+          <span>DeepSeek Harness GUI</span>
           <span class="badge">Desktop</span>
         </div>
       </div>
@@ -889,7 +889,7 @@
             </div>
             <div class="diag-brand-info">
               <div class="diag-title-row">
-                <span class="diag-title" id="diag-title">DeepSeek Harness</span>
+                <span class="diag-title" id="diag-title">DeepSeek Harness GUI</span>
                 <span class="diag-version-badge" id="diag-header-version">Desktop</span>
               </div>
               <div class="diag-subtitle">系统运行状态与诊断维护中心</div>
@@ -1017,7 +1017,7 @@
                 </div>
                 <div class="update-hub-info">
                   <div class="update-hub-headline" id="update-hub-headline">已是最新版本</div>
-                  <div class="update-hub-desc" id="update-hub-desc">DeepSeek Harness 官方发布分支</div>
+                  <div class="update-hub-desc" id="update-hub-desc">DeepSeek Harness GUI 官方发布分支</div>
                 </div>
               </div>
               <button class="btn-update-action" id="btn-diag-check-update" type="button">
@@ -1200,7 +1200,7 @@
             await invoke("manual_check_for_update");
           } else {
             if (updateHeadline) updateHeadline.textContent = "当前已是最新版本";
-            if (updateDesc) updateDesc.textContent = `DeepSeek Harness ${currentSummary?.appVersion ? "v" + currentSummary.appVersion : ""} · 官方稳定版本`;
+            if (updateDesc) updateDesc.textContent = `DeepSeek Harness GUI ${currentSummary?.appVersion ? "v" + currentSummary.appVersion : ""} · 官方稳定版本`;
             showToast("当前已是最新版本，无需更新", "success");
           }
         } catch (error) {

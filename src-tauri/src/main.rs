@@ -5,5 +5,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    harness_desktop_lib::run();
+    deepseek_harness_gui_lib::run();
 }

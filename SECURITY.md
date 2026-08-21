@@ -6,7 +6,7 @@ Please **do not** open a public issue for security vulnerabilities.
 
 To report a security problem, use one of the private channels:
 
-- **GitHub Security Advisory**: open a [private security advisory](https://github.com/FuQiangChen/harness-agent/security/advisories/new) (recommended).
+- **GitHub Security Advisory**: open a [private security advisory](https://github.com/FuQiangChen/deepseek-harness-gui/security/advisories/new) (recommended).
 - **Direct issue**: if GitHub advisories are not available, email the maintainer and include `[SECURITY]` in the subject line. Do not include secrets or exploit details in the title.
 
 You should receive a response within a few business days. Please include:
