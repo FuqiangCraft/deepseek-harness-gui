@@ -20,7 +20,7 @@ jobs:
           - platform: "macos-latest"
             target: "aarch64-apple-darwin"
             bundles: "dmg"
-          - platform: "macos-13"
+          - platform: "macos-latest"
             target: "x86_64-apple-darwin"
             bundles: "dmg"
           - platform: "ubuntu-22.04"
@@ -145,9 +145,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "DeepSeek Harness Desktop ${{ github.ref_name }}"
+          releaseName: "DeepSeek Harness GUI ${{ github.ref_name }}"
           releaseBody: |
-            **DeepSeek Harness Desktop** - a cross-platform desktop client for the official DeepSeek Harness (dsh) engine, built on Tauri 2.0.
+            **DeepSeek Harness GUI** - a cross-platform desktop client for the official DeepSeek Harness (dsh) engine, built on Tauri 2.0.
 
             ## Platforms
             - Windows x64 (NSIS / MSI)
@@ -166,7 +166,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $binary = "src-tauri/target/${{ matrix.target }}/release/harness-desktop.exe"
+          $binary = "src-tauri/target/${{ matrix.target }}/release/deepseek-harness-gui.exe"
           $signature = Get-AuthenticodeSignature -LiteralPath $binary
           if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature: $($signature.Status)" }
 
@@ -184,14 +184,14 @@ jobs:
           $installer = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/nsis" -Filter '*setup.exe' | Select-Object -First 1
           if (-not $installer) { throw 'NSIS installer not found' }
           Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
-          $installed = Get-ChildItem "$env:LOCALAPPDATA\DeepSeek Harness" -Recurse -Filter '*.exe' | Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1
+          $installed = Get-ChildItem "$env:LOCALAPPDATA\DeepSeek Harness GUI" -Recurse -Filter '*.exe' | Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1
           if (-not $installed) { throw 'Installed application executable not found' }
           $env:HARNESS_SMOKE_EXECUTABLE = $installed.FullName
           node scripts/smoke-desktop.js
-          $uninstaller = Get-ChildItem "$env:LOCALAPPDATA\DeepSeek Harness" -Recurse -Filter '*uninstall*.exe' | Select-Object -First 1
+          $uninstaller = Get-ChildItem "$env:LOCALAPPDATA\DeepSeek Harness GUI" -Recurse -Filter '*uninstall*.exe' | Select-Object -First 1
           if ($uninstaller) { Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait }
           Start-Sleep -Seconds 3
-          if (Test-Path "$env:LOCALAPPDATA\DeepSeek Harness") { throw 'NSIS uninstall left application files behind' }
+          if (Test-Path "$env:LOCALAPPDATA\DeepSeek Harness GUI") { throw 'NSIS uninstall left application files behind' }
 
       - name: Install and smoke test macOS DMG
         if: runner.os == 'macOS'
@@ -200,11 +200,11 @@ jobs:
           MOUNT=$(mktemp -d)
           hdiutil attach "$DMG" -mountpoint "$MOUNT" -nobrowse
           APP=$(find "$MOUNT" -maxdepth 1 -name '*.app' -print -quit)
-          cp -R "$APP" "$RUNNER_TEMP/DeepSeek Harness.app"
+          cp -R "$APP" "$RUNNER_TEMP/DeepSeek Harness GUI.app"
           hdiutil detach "$MOUNT"
-          export HARNESS_SMOKE_EXECUTABLE="$RUNNER_TEMP/DeepSeek Harness.app/Contents/MacOS/harness-desktop"
+          export HARNESS_SMOKE_EXECUTABLE="$RUNNER_TEMP/DeepSeek Harness GUI.app/Contents/MacOS/deepseek-harness-gui"
           node scripts/smoke-desktop.js
-          rm -rf "$RUNNER_TEMP/DeepSeek Harness.app"
+          rm -rf "$RUNNER_TEMP/DeepSeek Harness GUI.app"
 
       - name: Install and smoke test Linux packages
         if: runner.os == 'Linux'
@@ -215,9 +215,9 @@ jobs:
           mv startup-performance.json startup-performance-appimage.json
           DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name '*.deb' -print -quit)
           sudo apt-get install -y "$DEB"
-          HARNESS_SMOKE_EXECUTABLE="$(command -v harness-desktop)" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
+          HARNESS_SMOKE_EXECUTABLE="$(command -v deepseek-harness-gui)" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
           mv startup-performance.json startup-performance-deb.json
-          sudo apt-get remove -y harness-desktop
+          sudo apt-get remove -y deepseek-harness-gui
 
       - name: Upload release verification reports
         uses: actions/upload-artifact@v4
