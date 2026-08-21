@@ -16,7 +16,8 @@ const nodeBinary = process.platform === "win32" ? "src-tauri/resources/node/node
 required.push(nodeBinary);
 for (const file of required) if (!fs.existsSync(file) || fs.statSync(file).size === 0) throw new Error(`missing release resource: ${file}`);
 const manifest = JSON.parse(fs.readFileSync("src-tauri/resources/sidecar-manifest.json", "utf8"));
-if (!manifest.nodeVersion?.startsWith("v22.") || !manifest.dshVersion) {
+const nodeMajor = Number(manifest.nodeVersion?.match(/^v(\d+)\./)?.[1] || 0);
+if (nodeMajor < 22 || !manifest.dshVersion) {
   throw new Error(`invalid sidecar manifest or non-LTS Node runtime: ${manifest.nodeVersion || "<missing>"}`);
 }
 const tauriConfig = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));

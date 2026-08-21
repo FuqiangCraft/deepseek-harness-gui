@@ -1,5 +1,5 @@
 diff --git a/lib/client.js b/lib/client.js
-index fe70b81a707313743b2e17e023f793ed1cf39b0e..1dd0e89e7b91ba87610fafe5b7df8693d7485333 100644
+index 6797c5c20091d9e14d0007f2a46e56b1cf48fb47..87b9fcb5da650ce6c56f5cf397505a85df28c83e 100644
 --- a/lib/client.js
 +++ b/lib/client.js
 @@ -84,6 +84,10 @@ window.__ModuleLoader__.load({
@@ -13,7 +13,7 @@ index fe70b81a707313743b2e17e023f793ed1cf39b0e..1dd0e89e7b91ba87610fafe5b7df8693
  			return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconSettingsOutline16, {
  				className: SettingsRoot_module_css_default.navIcon,
  				size: 16
-@@ -199,6 +203,32 @@ window.__ModuleLoader__.load({
+@@ -200,6 +204,32 @@ window.__ModuleLoader__.load({
  					return new Set([...previous, id]);
  				});
  			}, []);
@@ -46,7 +46,7 @@ index fe70b81a707313743b2e17e023f793ed1cf39b0e..1dd0e89e7b91ba87610fafe5b7df8693
  			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
  				(0, react_jsx_runtime.jsx)("button", {
  					type: "button",
-@@ -525,6 +555,274 @@ window.__ModuleLoader__.load({
+@@ -495,6 +525,283 @@ window.__ModuleLoader__.load({
  			let rows = [];
  			let onboardingVersion = -1;
  			let onboardingSteps = [];
@@ -330,7 +330,7 @@ index fe70b81a707313743b2e17e023f793ed1cf39b0e..1dd0e89e7b91ba87610fafe5b7df8693
  			const shellInjected = () => ({ hooks: {
  				sections: {
  					getSnapshot: () => {
-@@ -626,6 +924,12 @@ window.__ModuleLoader__.load({
+@@ -597,6 +904,12 @@ window.__ModuleLoader__.load({
  					scope: "root"
  				} }
  			}, GeneralSection));
