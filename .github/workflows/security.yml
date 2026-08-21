@@ -41,7 +41,7 @@ jobs:
         with:
           upload: "never"
           output: results
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         continue-on-error: true
         with:
           name: codeql-results
