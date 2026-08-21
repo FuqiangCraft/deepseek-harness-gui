@@ -304,10 +304,12 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let startup_started = std::time::Instant::now();
                 app_handle.state::<diagnostics::DiagnosticsState>().set_phase("resource_resolution");
-                let resource_dir = app_handle
-                    .path()
-                    .resource_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."));
+                let resource_dir = sidecar::strip_verbatim_prefix(
+                    app_handle
+                        .path()
+                        .resource_dir()
+                        .unwrap_or_else(|_| PathBuf::from(".")),
+                );
                 let _ = app_handle.emit("startup-progress", "正在初始化引擎组件…");
 
                 // Sidecar 由安装器随应用展开，运行时直接从只读资源目录启动。

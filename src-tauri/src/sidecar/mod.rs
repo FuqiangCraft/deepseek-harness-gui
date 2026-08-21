@@ -3,4 +3,4 @@
 
 pub mod manager;
 
-pub use manager::{SidecarError, SidecarManager};
+pub use manager::{strip_verbatim_prefix, SidecarError, SidecarManager};

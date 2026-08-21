@@ -84,6 +84,22 @@ pub struct SidecarManager {
     job: Option<job_object::JobObjectGuard>,
 }
 
+/// 去除 Windows 扩展路径前缀 (\\?\ 或 \\?\UNC\)，避免 Node.js 启动时由于 lstat 失败抛出 EISDIR 异常。
+pub fn strip_verbatim_prefix<P: AsRef<Path>>(path: P) -> PathBuf {
+    let p = path.as_ref();
+    #[cfg(windows)]
+    {
+        let s = p.to_string_lossy();
+        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{}", rest));
+        }
+        if let Some(rest) = s.strip_prefix(r"\\?\") {
+            return PathBuf::from(rest);
+        }
+    }
+    p.to_path_buf()
+}
+
 impl SidecarManager {
     /// 拉起 Sidecar 子进程并启动后台 I/O 监听循环。
     ///
@@ -101,17 +117,19 @@ impl SidecarManager {
         run_id: &str,
     ) -> Result<Arc<Self>, SidecarError> {
         let run_id = run_id.to_string();
-        let script_buf = script_path.as_ref().to_path_buf();
+        let node_binary_buf = strip_verbatim_prefix(node_binary);
+        let script_buf = strip_verbatim_prefix(script_path);
+        let working_dir_buf = strip_verbatim_prefix(working_dir);
         info!(
             "Spawning sidecar: binary={:?}, script={:?}, cwd={:?}",
-            node_binary.as_ref(),
+            node_binary_buf,
             script_buf,
-            working_dir.as_ref()
+            working_dir_buf
         );
 
-        let mut cmd = Command::new(node_binary.as_ref());
+        let mut cmd = Command::new(&node_binary_buf);
         cmd.arg(&script_buf)
-            .current_dir(working_dir.as_ref())
+            .current_dir(&working_dir_buf)
             .env("HARNESS_RUN_ID", &run_id)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -433,6 +451,23 @@ mod tests {
         let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_secs(5)).await;
 
         assert!(matches!(result, Err(SidecarError::ProcessTerminated)));
+    }
+
+    #[test]
+    fn test_strip_verbatim_prefix() {
+        #[cfg(windows)]
+        {
+            let verbatim = PathBuf::from(r"\\?\C:\Users\runneradmin\AppData\Local\DeepSeek Harness GUI\boot.js");
+            let cleaned = strip_verbatim_prefix(verbatim);
+            assert_eq!(cleaned, PathBuf::from(r"C:\Users\runneradmin\AppData\Local\DeepSeek Harness GUI\boot.js"));
+
+            let verbatim_unc = PathBuf::from(r"\\?\UNC\server\share\file.js");
+            let cleaned_unc = strip_verbatim_prefix(verbatim_unc);
+            assert_eq!(cleaned_unc, PathBuf::from(r"\\server\share\file.js"));
+        }
+
+        let normal = PathBuf::from("/path/to/boot.js");
+        assert_eq!(strip_verbatim_prefix(&normal), normal);
     }
 }
 
