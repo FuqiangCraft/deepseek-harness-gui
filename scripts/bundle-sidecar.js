@@ -63,6 +63,29 @@ fs.cpSync(path.join(deployDir, "node_modules"), path.join(stagingSidecarDir, "no
 fs.copyFileSync(path.join(deployDir, "package.json"), path.join(stagingSidecarDir, "package.json"));
 fs.rmSync(deployRoot, { recursive: true, force: true });
 
+// 清理 node_modules/.bin 以及所有悬空符号链接，防止 tauri-build 在 Linux/macOS 上因符号链接失效报错
+const binDir = path.join(stagingSidecarDir, "node_modules", ".bin");
+if (fs.existsSync(binDir)) {
+  fs.rmSync(binDir, { recursive: true, force: true });
+}
+function removeBrokenSymlinks(dir) {
+  if (!fs.existsSync(dir)) return;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      try {
+        fs.statSync(fullPath);
+      } catch {
+        fs.rmSync(fullPath, { force: true });
+      }
+    } else if (entry.isDirectory()) {
+      removeBrokenSymlinks(fullPath);
+    }
+  }
+}
+removeBrokenSymlinks(path.join(stagingSidecarDir, "node_modules"));
+
 // 发布前反馈环：从部署目录本身解析关键启动依赖。漏包时在 CI 打包阶段直接失败，
 // 而不是等用户安装 AppImage 后卡在启动页。
 const resolveProbe = `
