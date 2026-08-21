@@ -95,7 +95,7 @@ if (!isWindows) {
 }
 const nodeVersion = execSync(`"${targetNodePath}" --version`).toString().trim();
 const ver = nodeVersion.match(/^v(\d+)\.(\d+)\./);
-const ok = ver && Number(ver[1]) === 22 && Number(ver[2]) >= 19;
+const ok = ver && (Number(ver[1]) === 22 ? Number(ver[2]) >= 19 : Number(ver[1]) > 22);
 if (!ok) {
   throw new Error(`捆绑运行时必须是 Node 22.19+ LTS，当前为 ${nodeVersion}。请使用 .node-version 或设置 NODE_EXE_PATH。`);
 }
