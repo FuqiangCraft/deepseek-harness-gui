@@ -1,7 +1,8 @@
 {
-  "name": "harness-desktop",
+  "name": "deepseek-harness-gui",
+  "description": "DeepSeek Harness GUI Client",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "license": "MIT",
   "packageManager": "npm@11.6.0",
   "engines": {

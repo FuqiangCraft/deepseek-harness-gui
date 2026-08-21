@@ -74,7 +74,7 @@ function scanCargo(records, texts) {
   } catch {}
   const raw = execFileSync("cargo", ["metadata", "--format-version", "1", "--locked", "--manifest-path", path.join(root, "src-tauri", "Cargo.toml")], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   for (const pkg of JSON.parse(raw).packages) {
-    if (pkg.name === "harness-desktop") continue;
+    if (pkg.name === "harness-desktop" || pkg.name === "deepseek-desktop-gui" || pkg.name === "deepseek-harness-gui") continue;
     records.set(`cargo:${pkg.name}@${pkg.version}`, { ecosystem: "cargo", name: pkg.name, version: pkg.version, license: normalizeLicense(pkg.license) });
     collectTexts(path.dirname(pkg.manifest_path), texts);
   }

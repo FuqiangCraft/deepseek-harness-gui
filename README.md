@@ -1,8 +1,8 @@
-# DeepSeek Harness Desktop
+# DeepSeek Harness GUI
 
 <div align="center">
 
-![DeepSeek Harness Logo](./src-tauri/icons/128x128.png)
+![DeepSeek Harness GUI Logo](./src-tauri/icons/128x128.png)
 
 **基于 Tauri 2.0 + 官方 `@deepseek-ai/dsh` 引擎打造的跨平台极薄桌面客户端**
 
@@ -12,26 +12,35 @@
 [![DeepSeek](https://img.shields.io/badge/DeepSeek-Official_DSH-0066FF.svg)](https://platform.deepseek.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
+[English](#-disclaimer) | [简体中文](#-免责声明)
+
 </div>
+
+---
+
+### ⚠️ 免责声明 / Disclaimer
+
+> [!IMPORTANT]
+> **中文**：本项目为独立开源社区开发的桌面客户端工具，**并非 DeepSeek（深度求索）官方产品，亦未获得官方背书或授权**。所有 DeepSeek 及 DeepSeek Harness 相关的名称、徽标和商标均属于其各自所有者（杭州深度求索人工智能基础技术研究有限公司）。本项目仅提供原生桌面外壳交互与环境打包分发。
+>
+> **English**: This project is an independent, community-driven desktop client. It is **NOT** an official product of DeepSeek, nor is it affiliated with, sponsored, or endorsed by DeepSeek AI. All trademarks, service marks, and company names are the property of their respective owners.
 
 ---
 
 ## 📖 项目简介
 
-**DeepSeek Harness Desktop** 是一款为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 量身打造的桌面端原生客户端。
+**DeepSeek Harness GUI** 是一款为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 量身打造的桌面端原生客户端。
 
-> 本项目是独立社区项目，并非 DeepSeek AI 官方产品，也未获得其背书。正式安装包仅通过本仓库 GitHub Releases 发布。
-
-客户端采用 **Rust (Tauri v2) + 独立 Node.js Sidecar** 的架构设计，将官方 DSH 引擎（`@deepseek-ai/dsh`）以内嵌库的形式在本地 Loopback 端口拉起，并通过 WebView 呈现官方交互界面，兼具原生桌面应用的流畅体验与官方智能体引擎的强大扩展能力。
+客户端采用 **Rust (Tauri v2) + 独立 Node.js Sidecar** 的架构设计，将官方 DSH 引擎（`@deepseek-ai/dsh`）以内嵌库的形式在本地 Loopback 端口拉起，并通过系统原生 WebView 呈现官方交互界面，兼具原生桌面应用的极致轻量体验与官方智能体引擎的强大扩展能力。
 
 ---
 
 ## ✨ 核心特性
 
-- 🚀 **极薄宿主**：基于 Tauri 2.0 构建原生外壳，不内置 Chromium；引擎由安装器预先展开的 Sidecar 与 Node 22 LTS 承载，首次启动不再解压依赖。
-- 📦 **开箱即用，免配环境**：安装包内嵌独立 Node.js 运行时与完整 Sidecar 生产闭包，最终用户**无需预装 Node.js、Rust 或手动更新依赖**。
+- 🚀 **极薄原生宿主**：基于 Tauri 2.0 构建原生外壳，不内置臃肿的 Chromium；引擎由安装器预先展开的 Sidecar 与 Node 22 LTS 承载，开箱极速启动。
+- 📦 **免配环境，开箱即用**：安装包内嵌独立 Node.js 运行时与完整 Sidecar 生产闭包，最终用户**无需预装 Node.js、Rust 或手动配置命令行环境**。
 - 🤖 **完整官方 DSH 引擎**：以库模式启动官方 `dsh-base` + `dsh-web-app` Profile，享受官方实时更新的智能体生态与全套工具支持。
-- 🎨 **现代白阶视觉体验**：全新设计的纯白微光主题启动 Loading、官方 DeepSeek 高清矢量徽标与全尺寸视网膜图标集。
+- 🎨 **现代白阶视觉体验**：纯白微光主题启动 Loading、DeepSeek 高清矢量徽标与全尺寸视网膜图标集。
 - 🛡️ **进程生命周期与防孤儿守护**：
   - **Windows Job Object**：宿主进程意外退出或崩溃时，操作系统内核级自动级联销毁 Sidecar 子进程，杜绝后台残留。
   - **Stdin/Stdout 看门狗**：管道断开自动触发优雅停机。
@@ -70,7 +79,7 @@ flowchart TB
 ## 📁 目录结构
 
 ```text
-harness-agent/
+deepseek-harness-gui/
 ├── src-tauri/                 # Tauri 宿主核心工程 (Rust)
 │   ├── src/                   # Rust 源码 (lib.rs 入口, sidecar 管理器, IPC 通信)
 │   ├── icons/                 # 全平台各尺寸应用图标 (ico, icns, png)
@@ -81,7 +90,7 @@ harness-agent/
 │   ├── src/                   # Sidecar 启动器 (boot.ts) 与服务挂载
 │   ├── patches/               # 官方上游依赖补丁
 │   └── package.json           # DSH 官方依赖与工具链
-├── scripts/                   # 自动化构建脚本
+├── scripts/                   # 自动化构建与许可证脚本
 │   └── bundle-sidecar.js      # Sidecar 生产闭包与 Node 22 运行时组装脚本
 ├── index.html                 # 客户端启动 Loading 页面 (纯白极简动效)
 ├── app-icon.svg               # 1024x1024 高清矢量主图标
@@ -93,69 +102,50 @@ harness-agent/
 
 ## 🛠️ 本地开发与构建
 
-## ✅ 正式支持范围
+### 1. 平台支持范围
 
-- Windows 10/11 x64：NSIS
-- macOS 12+ Intel / Apple Silicon：签名并公证的 DMG
-- Ubuntu 22.04+ x64：AppImage、deb
+- **Windows 10/11 x64**：NSIS 安装包
+- **macOS 12+ (Intel / Apple Silicon)**：DMG 镜像
+- **Ubuntu 22.04+ x64**：AppImage / DEB 安装包
 
-Windows ARM64、Linux ARM64、MSI 与 rpm 当前不属于正式支持范围。稳定版安装包必须通过签名、安装、首次启动、二次启动和自动升级门禁；未完成门禁的构建统一标记为 Preview。
+### 2. 环境准备
 
-### 1. 环境准备
-
-- **Node.js**：`>= 22.19.0` 或 `>= 24.0.0`
-- **pnpm**：`>= 9.0.0`
+- **Node.js**：`>= 22.19.0`
+- **pnpm**：`>= 11.9.0`
 - **Rust 工具链**：`stable` (含 `cargo`)
-- **构建工具**：
-  - Windows: C++ Build Tools (Visual Studio)
-  - macOS: Xcode Command Line Tools (`xcode-select --install`)
+- **系统依赖**：
+  - Windows: Visual Studio C++ Build Tools & WebView2
+  - macOS: Xcode Command Line Tools
   - Linux (Ubuntu/Debian): `sudo apt-get install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential`
 
-### 2. 安装依赖
+### 3. 安装依赖与构建
 
 ```bash
-# 根目录安装前端与 Tauri CLI 依赖
-npm install
+# 1. 安装根目录与 Sidecar 依赖
+npm ci
+cd sidecar && pnpm install --frozen-lockfile && cd ..
 
-# 安装 Sidecar 子工程依赖
-cd sidecar && pnpm install && cd ..
-```
+# 2. 编译前端与打包 Sidecar 闭包
+npm run build:all
 
-### 3. 开发模式调试
-
-```bash
-# 启动本地开发服务 (支持前端热重载与 Sidecar 调试)
+# 3. 运行本地开发调试
 npm run tauri dev
 ```
 
-### 4. 本地全量打包
+### 4. 生成发行安装包
 
 ```bash
-# 步骤 1: 编译前端 + 组装 Sidecar 生产闭包与 Node 22 运行时
+# 步骤 1: 准备完整闭包与许可证
 npm run build:all
 
-# 步骤 2: 生成当前平台的安装包
+# 步骤 2: 生成当前系统平台的安装包
 npx tauri build
 ```
 
 打包完成后，各平台产物位于 `src-tauri/target/release/bundle/`：
-- **🪟 Windows**：`nsis/DeepSeek Harness_*_x64-setup.exe`
-- **🍎 macOS**：`dmg/DeepSeek Harness_*_aarch64.dmg` / `x64.dmg`
-- **🐧 Linux**：`appimage/deepseek-harness_*.AppImage` / `deb/deepseek-harness_*.deb`
-
----
-
-## 🌐 自动化多端发布 (GitHub Actions)
-
-本项目已配置完整的全平台 CI/CD 自动化流水线（`.github/workflows/release.yml`）。无需本地配置 Mac 或 Linux 环境，即可通过 GitHub 自动编译发布所有平台的安装包：
-
-```bash
-# 打上版本 Tag 并推送到 GitHub，自动触发 Windows、macOS (Apple Silicon/Intel)、Linux 云端构建
-git tag v0.1.4
-git push origin v0.1.4
-```
-
-构建完成后，GitHub Releases 将自动生成并挂载各平台安装包供直接下载。
+- **🪟 Windows**：`nsis/DeepSeek Harness GUI_*_x64-setup.exe`
+- **🍎 macOS**：`dmg/DeepSeek Harness GUI_*_aarch64.dmg` / `x64.dmg`
+- **🐧 Linux**：`appimage/deepseek-harness-gui_*.AppImage` / `deb/deepseek-harness-gui_*.deb`
 
 ---
 
@@ -171,7 +161,7 @@ git push origin v0.1.4
    DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
    ```
 
-*配置保存在使用者本地电脑的 `~/.dsh/` 目录下，互不影响。*
+*所有配置均保存在使用者本地电脑的 `~/.dsh/` 目录下，安全独立。*
 
 ---
 
@@ -184,26 +174,16 @@ git push origin v0.1.4
 
 完整安全策略见 [SECURITY.md](./SECURITY.md)。
 
-## 🩺 日志与故障诊断
-
-应用默认只写本地结构化日志，不上传遥测、崩溃、提示词或会话。通过原生菜单“帮助与诊断”可以打开日志目录、复制脱敏摘要、导出诊断 ZIP 或检查签名更新。日志最多保留 14 天且总量不超过 100 MiB。
-
-诊断包只包含应用版本、平台、启动阶段、耗时与近期脱敏日志，不包含 `~/.dsh` 设置、API Key、会话或工作区文件。提交 Issue 前仍请人工检查诊断包。应用数据位于系统为 `io.github.fuqiangchen.harness-agent` 分配的 App Data/Log 目录；DSH 用户数据继续位于 `~/.dsh/`。
-
-若应用停留在启动页：
-
-1. 点击“导出诊断包”。
-2. 确认包内没有个人信息。
-3. 使用 Installation problem 模板提交平台、安装包格式和诊断摘要。
-
 ---
 
-## ™️ 商标声明
-
-DeepSeek、DeepSeek Harness 及相关名称、徽标是 DeepSeek AI 的商标。本项目为社区独立实现的第三方桌面客户端，与 DeepSeek AI 无关联，未获其官方背书。官方引擎 `@deepseek-ai/dsh*` 以 MIT 许可证开源。
+## 🤝 社区贡献与协作
+ 
+欢迎参与社区建设！提交代码或反馈问题前请参阅 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+- 提交前请务必保证本地 `npm run build:all`、`cargo test` 与 `npm run licenses:check` 全部通过。
+- 涉及重大特性变更请先在 Issue 中交流讨论。
 
 ---
 
 ## 📄 开源许可证
 
-本项目基于 [MIT License](./LICENSE) 开源。
+本项目基于 [MIT License](./LICENSE) 开源。第三方依赖许可证清单请参阅 [THIRD_PARTY_LICENSES.txt](./THIRD_PARTY_LICENSES.txt)。
