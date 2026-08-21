@@ -122,18 +122,31 @@ pub fn redact(input: &str) -> String {
     for marker in ["sk-", "Bearer ", "Authorization:", "Cookie:"] {
         let mut cursor = 0;
         loop {
+            if cursor >= value.len() {
+                break;
+            }
             let lowered = value[cursor..].to_ascii_lowercase();
             let Some(relative) = lowered.find(&marker.to_ascii_lowercase()) else {
                 break;
             };
             let start = cursor + relative;
-            let secret_start = start + marker.len();
+            let mut secret_start = start + marker.len();
+            while secret_start < value.len() && value.as_bytes()[secret_start].is_ascii_whitespace() {
+                secret_start += 1;
+            }
+            if secret_start >= value.len() {
+                break;
+            }
             let end = value[secret_start..]
                 .find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
                 .map(|n| secret_start + n)
                 .unwrap_or(value.len());
-            value.replace_range(secret_start..end, "[REDACTED]");
-            cursor = secret_start + "[REDACTED]".len();
+            if secret_start < end {
+                value.replace_range(secret_start..end, "[REDACTED]");
+                cursor = secret_start + "[REDACTED]".len();
+            } else {
+                cursor = secret_start + 1;
+            }
         }
     }
     value
@@ -353,13 +366,15 @@ mod tests {
 
     #[test]
     fn redacts_secrets_and_home_paths() {
-        let input = format!(
-            "Authorization: Bearer abc sk-secret {}",
-            std::env::var("USERPROFILE").unwrap_or_default()
-        );
+        let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap_or_default();
+        let input = format!("Authorization: Bearer abc sk-secret {home}/my-file");
         let output = redact(&input);
         assert!(!output.contains("abc"));
         assert!(!output.contains("sk-secret"));
+        if !home.is_empty() {
+            assert!(!output.contains(&home));
+            assert!(output.contains("$HOME"));
+        }
     }
 
     #[test]
