@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
-  "productName": "DeepSeek Harness",
+  "productName": "DeepSeek Harness GUI",
   "version": "0.1.4",
-  "identifier": "io.github.fuqiangchen.harness-agent",
+  "identifier": "io.github.fuqiangchen.deepseek-harness-gui",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "DeepSeek Harness",
+        "title": "DeepSeek Harness GUI",
         "width": 1280,
         "height": 850,
         "minWidth": 900,
@@ -54,9 +54,9 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY1OTBCMDREMUY0RUZEQ0EKUldUSy9VNGZUYkNROWF2MG4rbXRzcjdheUpMTDJxTGJJQnB3VVViYVFaTHZqRjhLR2d0QjRuN1cK",
       "endpoints": [
-        "https://github.com/FuQiangChen/harness-agent/releases/latest/download/latest.json"
+        "https://github.com/FuqiangCraft/deepseek-harness-gui/releases/latest/download/latest.json"
       ]
     }
   }
