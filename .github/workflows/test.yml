@@ -62,6 +62,7 @@ jobs:
 
       - name: Upload bundle size report
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: bundle-size-${{ matrix.target }}
           path: bundle-size-report.json
