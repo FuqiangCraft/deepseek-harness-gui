@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-test("deb smoke test validates and canonicalizes the local package path", () => {
+test("release workflow targets Windows and macOS desktop platforms", () => {
   const workflow = fs.readFileSync(".github/workflows/release.yml", "utf8");
 
-  assert.match(workflow, /DEB=\$\(find[^\n]+-type f[^\n]+-name '\*\.deb'/);
-  assert.match(workflow, /test -n "\$DEB"/);
-  assert.match(workflow, /sudo apt-get install -y "\$\(realpath "\$DEB"\)"/);
+  assert.match(workflow, /x86_64-pc-windows-msvc/);
+  assert.match(workflow, /aarch64-apple-darwin/);
+  assert.match(workflow, /x86_64-apple-darwin/);
 });

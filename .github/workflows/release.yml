@@ -23,9 +23,6 @@ jobs:
           - platform: "macos-latest"
             target: "x86_64-apple-darwin"
             bundles: "dmg"
-          - platform: "ubuntu-22.04"
-            target: "x86_64-unknown-linux-gnu"
-            bundles: "appimage,deb"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -46,12 +43,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential curl wget file xvfb libfuse2 squashfs-tools desktop-file-utils gsettings-desktop-schemas
 
       - name: Install dependencies
         run: |
@@ -148,7 +139,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
         with:
           tagName: ${{ github.ref_name }}
@@ -159,7 +149,6 @@ jobs:
             ## Platforms
             - Windows x64 (NSIS / MSI)
             - macOS (Apple Silicon / Intel, DMG)
-            - Linux (AppImage / deb / rpm)
 
             ## Install
             Download the installer for your platform. No Node.js or Rust installation is required; the engine is extracted automatically on first launch.
@@ -216,20 +205,6 @@ jobs:
           export HARNESS_SMOKE_EXECUTABLE="$RUNNER_TEMP/DeepSeek Harness GUI.app/Contents/MacOS/deepseek-harness-gui"
           node scripts/smoke-desktop.js
           rm -rf "$RUNNER_TEMP/DeepSeek Harness GUI.app"
-
-      - name: Install and smoke test Linux packages
-        if: runner.os == 'Linux'
-        run: |
-          APPIMAGE=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/appimage" -name '*.AppImage' -print -quit)
-          chmod +x "$APPIMAGE"
-          HARNESS_SMOKE_EXECUTABLE="$APPIMAGE" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
-          mv startup-performance.json startup-performance-appimage.json
-          DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -type f -name '*.deb' -print -quit)
-          test -n "$DEB"
-          sudo apt-get install -y "$(realpath "$DEB")"
-          HARNESS_SMOKE_EXECUTABLE="$(command -v deepseek-harness-gui)" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
-          mv startup-performance.json startup-performance-deb.json
-          sudo apt-get remove -y deepseek-harness-gui
 
       - name: Upload release verification reports
         uses: actions/upload-artifact@v4
