@@ -68,7 +68,7 @@ jobs:
           path: bundle-size-report.json
 
       - name: Run Rust unit tests
-        run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum -- ' || '' }}cargo test --manifest-path src-tauri/Cargo.toml
+        run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum -- ' || '' }}cargo test --manifest-path src-tauri/Cargo.toml -- --nocapture
 
       - name: Run Rust lints
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
