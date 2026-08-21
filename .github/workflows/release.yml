@@ -51,7 +51,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential curl wget file xvfb
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev build-essential curl wget file xvfb libfuse2
 
       - name: Install dependencies
         run: |
@@ -140,10 +140,15 @@ jobs:
       - name: Configure release signing and updater public key
         run: node scripts/configure-release.js
 
+      - name: Install Rust Intel macOS target
+        if: runner.os == 'macOS' && matrix.target == 'x86_64-apple-darwin'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Build Tauri Desktop and Publish Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "DeepSeek Harness GUI ${{ github.ref_name }}"
