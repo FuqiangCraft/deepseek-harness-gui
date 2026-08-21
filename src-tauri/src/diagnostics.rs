@@ -154,6 +154,11 @@ pub fn redact(input: &str) -> String {
 
 /// 清理超过 14 天或使目录总量超过 100 MiB 的旧日志。
 pub fn enforce_log_retention(log_dir: &Path) {
+    enforce_log_retention_limit(log_dir, 100 * 1024 * 1024, Duration::from_secs(14 * 24 * 60 * 60));
+}
+
+/// 按指定大小与时间限制清理旧日志。
+pub fn enforce_log_retention_limit(log_dir: &Path, max_bytes: u64, max_age: Duration) {
     let mut files: Vec<_> = fs::read_dir(log_dir)
         .into_iter()
         .flatten()
@@ -171,7 +176,7 @@ pub fn enforce_log_retention(log_dir: &Path) {
         })
         .collect();
     let cutoff = SystemTime::now()
-        .checked_sub(Duration::from_secs(14 * 24 * 60 * 60))
+        .checked_sub(max_age)
         .unwrap_or(SystemTime::UNIX_EPOCH);
     for (path, modified, _) in &files {
         if *modified < cutoff {
@@ -182,7 +187,7 @@ pub fn enforce_log_retention(log_dir: &Path) {
     files.sort_by_key(|(_, modified, _)| *modified);
     let mut total: u64 = files.iter().map(|(_, _, size)| size).sum();
     for (path, _, size) in files {
-        if total <= 100 * 1024 * 1024 {
+        if total <= max_bytes {
             break;
         }
         if fs::remove_file(path).is_ok() {
@@ -384,17 +389,17 @@ mod tests {
         for index in 0..3 {
             fs::write(
                 dir.join(format!("{index}.log")),
-                vec![b'x'; 40 * 1024 * 1024],
+                vec![b'x'; 400],
             )
             .unwrap();
         }
-        enforce_log_retention(&dir);
+        enforce_log_retention_limit(&dir, 1000, Duration::from_secs(14 * 24 * 60 * 60));
         let total: u64 = fs::read_dir(&dir)
             .unwrap()
             .flatten()
             .map(|entry| entry.metadata().unwrap().len())
             .sum();
-        assert!(total <= 100 * 1024 * 1024);
+        assert!(total <= 1000);
         fs::remove_dir_all(dir).unwrap();
     }
 
