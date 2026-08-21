@@ -83,16 +83,17 @@ jobs:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
         run: |
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || [ -z "${TAURI_UPDATER_PUBLIC_KEY:-}" ]; then
-            echo "Stable release requires Tauri updater signing and public keys" >&2
+            echo "Release requires Tauri updater signing and public keys" >&2
             exit 1
           fi
+          # Platform code-signing credentials are optional: when missing the
+          # build proceeds unsigned (SmartScreen/Gatekeeper may warn) and the
+          # release body already discloses this. Only export configured values.
           if [ "${RUNNER_OS}" = "macOS" ] && { [ -z "${APPLE_CERTIFICATE:-}" ] || [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; }; then
-            echo "Stable macOS release requires signing and notarization credentials" >&2
-            exit 1
+            echo "::warning::macOS signing/notarization credentials missing; producing an unsigned build"
           fi
           if [ "${RUNNER_OS}" = "Windows" ] && [ -z "${WINDOWS_CERTIFICATE:-}" ]; then
-            echo "Stable Windows release requires a code-signing certificate" >&2
-            exit 1
+            echo "::warning::Windows code-signing certificate missing; producing an unsigned build"
           fi
           # tauri-bundler reads these env vars for signing; an empty value is treated
           # as "configured" and triggers an empty-certificate import, so only export
@@ -122,7 +123,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Import Windows code-signing certificate
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE != ''
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -163,7 +164,7 @@ jobs:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       - name: Verify Windows Authenticode signature
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE != ''
         shell: pwsh
         run: |
           $binary = "src-tauri/target/${{ matrix.target }}/release/deepseek-harness-gui.exe"
@@ -171,7 +172,7 @@ jobs:
           if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature: $($signature.Status)" }
 
       - name: Verify macOS signature and notarization
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE != ''
         run: |
           APP_PATH=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -name '*.app' -maxdepth 2 -print -quit)
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
