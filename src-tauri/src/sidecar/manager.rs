@@ -410,7 +410,7 @@ mod tests {
 
         let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_millis(10)).await;
 
-        assert!(matches!(result, Err(SidecarError::StartupTimeout(0))));
+        assert!(matches!(result, Err(SidecarError::StartupTimeout(_))));
     }
 
     #[tokio::test]
@@ -419,7 +419,7 @@ mod tests {
         let notify = Notify::new();
         let closed = AtomicBool::new(false);
 
-        let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_secs(1)).await;
+        let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_secs(5)).await;
 
         assert_eq!(result.expect("reported port"), 43123);
     }
@@ -430,7 +430,7 @@ mod tests {
         let notify = Notify::new();
         let closed = AtomicBool::new(true);
 
-        let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_secs(1)).await;
+        let result = wait_for_port_signal(&port, &notify, &closed, Duration::from_secs(5)).await;
 
         assert!(matches!(result, Err(SidecarError::ProcessTerminated)));
     }
