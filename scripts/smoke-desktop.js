@@ -101,7 +101,24 @@ async function launchOnce(index, userRoot) {
   child.kill();
   await new Promise((resolve) => setTimeout(resolve, 750));
   snapshotHarnessLogs(userRoot, index);
-  if (duration === null) throw new Error(`launch ${index} did not reach navigation_complete within ${timeoutMs} ms`);
+  if (duration === null) {
+    console.error(`[smoke] launch ${index} timed out after ${timeoutMs} ms; harness logs:`);
+    const stack = [path.join(userRoot, "logs")];
+    while (stack.length) {
+      const current = stack.pop();
+      let entries;
+      try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+      for (const entry of entries) {
+        const full = path.join(current, entry.name);
+        if (entry.isDirectory()) stack.push(full);
+        else if (/harness\.log/i.test(entry.name)) {
+          const tail = fs.readFileSync(full, "utf8").split(/\r?\n/).slice(-60).join("\n");
+          console.error(`--- ${full} (tail) ---\n${tail}`);
+        }
+      }
+    }
+    throw new Error(`launch ${index} did not reach navigation_complete within ${timeoutMs} ms`);
+  }
   console.log(`[smoke] launch ${index}: ${duration} ms`);
   return duration;
 }
