@@ -2,7 +2,7 @@
   "name": "deepseek-harness-gui",
   "description": "DeepSeek Harness GUI Client",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "license": "MIT",
   "packageManager": "npm@11.6.0",
   "engines": {

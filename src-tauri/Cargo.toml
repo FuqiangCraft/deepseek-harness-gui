@@ -1,6 +1,6 @@
 [package]
 name = "deepseek-harness-gui"
-version = "0.1.5"
+version = "0.1.6"
 description = "DeepSeek Harness GUI Client"
 edition = "2021"
 
