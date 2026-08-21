@@ -123,7 +123,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Import Windows code-signing certificate
-        if: runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE != ''
+        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -164,15 +164,19 @@ jobs:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       - name: Verify Windows Authenticode signature
-        if: runner.os == 'Windows' && secrets.WINDOWS_CERTIFICATE != ''
+        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
         shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
         run: |
           $binary = "src-tauri/target/${{ matrix.target }}/release/deepseek-harness-gui.exe"
           $signature = Get-AuthenticodeSignature -LiteralPath $binary
           if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature: $($signature.Status)" }
 
       - name: Verify macOS signature and notarization
-        if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE != ''
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         run: |
           APP_PATH=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -name '*.app' -maxdepth 2 -print -quit)
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
