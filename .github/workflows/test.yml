@@ -60,6 +60,9 @@ jobs:
       - name: Verify bundled runtime resources
         run: npm run bundle:verify
 
+      - name: Test bundle tooling
+        run: npm test
+
       - name: Upload bundle size report
         uses: actions/upload-artifact@v4
         continue-on-error: true

@@ -17,6 +17,7 @@
     "sidecar:bundle": "node scripts/bundle-sidecar.js",
     "licenses:generate": "node scripts/generate-third-party-licenses.js",
     "licenses:check": "node scripts/generate-third-party-licenses.js --check",
+    "test": "node --test scripts/*.test.js",
     "bundle:verify": "node scripts/verify-release-bundle.js",
     "build:all": "npm run build && npm run sidecar:bundle"
   },

@@ -4,6 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { findIncompatibleNativeBinaries } from "./native-bundle-filter.js";
 
 const required = [
   "src-tauri/resources/sidecar/dist/boot.js",
@@ -23,6 +24,14 @@ if (nodeMajor < 22 || !manifest.dshVersion) {
 const tauriConfig = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
 if (tauriConfig.bundle?.resources?.["resources/sidecar"] !== "sidecar") {
   throw new Error("Sidecar must use Tauri directory-walk resource mapping; glob mappings flatten node_modules paths");
+}
+const incompatibleNativeBinaries = findIncompatibleNativeBinaries(
+  path.join("src-tauri", "resources", "sidecar", "node_modules")
+);
+if (incompatibleNativeBinaries.length > 0) {
+  throw new Error(
+    `bundle contains native binaries incompatible with the Linux glibc target: ${incompatibleNativeBinaries.join(", ")}`
+  );
 }
 const report = Object.fromEntries(required.map((file) => [file, fs.statSync(file).size]));
 fs.writeFileSync("bundle-size-report.json", `${JSON.stringify({ platform: process.platform, arch: process.arch, bytes: report, manifest }, null, 2)}\n`);

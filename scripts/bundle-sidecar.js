@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync, execSync } from "node:child_process";
+import { pruneIncompatibleNativeBinaries } from "./native-bundle-filter.js";
 
 const rootDir = process.cwd();
 const sidecarDir = path.join(rootDir, "sidecar");
@@ -62,6 +63,15 @@ fs.cpSync(path.join(deployDir, "node_modules"), path.join(stagingSidecarDir, "no
 });
 fs.copyFileSync(path.join(deployDir, "package.json"), path.join(stagingSidecarDir, "package.json"));
 fs.rmSync(deployRoot, { recursive: true, force: true });
+
+// linuxdeploy 会递归检查 AppDir 内的所有 ELF。可选原生依赖会同时携带
+// musl 和其他架构的预编译文件，必须在 Tauri 创建 AppDir 前裁掉。
+const removedNativeBinaries = pruneIncompatibleNativeBinaries(
+  path.join(stagingSidecarDir, "node_modules")
+);
+if (removedNativeBinaries.length > 0) {
+  console.log(`[bundle] 已移除非当前 Linux ABI 的原生预编译目录: ${removedNativeBinaries.join(", ")}`);
+}
 
 // 清理 node_modules/.bin 以及所有悬空符号链接，防止 tauri-build 在 Linux/macOS 上因符号链接失效报错
 const binDir = path.join(stagingSidecarDir, "node_modules", ".bin");
