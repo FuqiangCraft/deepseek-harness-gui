@@ -224,8 +224,9 @@ jobs:
           chmod +x "$APPIMAGE"
           HARNESS_SMOKE_EXECUTABLE="$APPIMAGE" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
           mv startup-performance.json startup-performance-appimage.json
-          DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name '*.deb' -print -quit)
-          sudo apt-get install -y "$DEB"
+          DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -type f -name '*.deb' -print -quit)
+          test -n "$DEB"
+          sudo apt-get install -y "$(realpath "$DEB")"
           HARNESS_SMOKE_EXECUTABLE="$(command -v deepseek-harness-gui)" HARNESS_SMOKE_WRAPPER=xvfb-run node scripts/smoke-desktop.js
           mv startup-performance.json startup-performance-deb.json
           sudo apt-get remove -y deepseek-harness-gui
