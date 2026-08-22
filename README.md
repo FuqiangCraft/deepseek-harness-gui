@@ -106,7 +106,7 @@ deepseek-harness-gui/
 
 - **Windows 10/11 x64**：NSIS 安装包
 - **macOS 12+ (Intel / Apple Silicon)**：DMG 镜像
-- **Ubuntu 22.04+ x64**：AppImage / DEB 安装包
+- **Ubuntu 22.04+ x64**：支持源码构建与 CI 验证；当前发布页暂不提供 Linux 安装包
 
 ### 2. 环境准备
 
@@ -145,7 +145,7 @@ npx tauri build
 打包完成后，各平台产物位于 `src-tauri/target/release/bundle/`：
 - **🪟 Windows**：`nsis/DeepSeek Harness GUI_*_x64-setup.exe`
 - **🍎 macOS**：`dmg/DeepSeek Harness GUI_*_aarch64.dmg` / `x64.dmg`
-- **🐧 Linux**：`appimage/deepseek-harness-gui_*.AppImage` / `deb/deepseek-harness-gui_*.deb`
+- **🐧 Linux**：当前需从源码执行 `npx tauri build`，自动发布安装包将在打包兼容性稳定后恢复
 
 ---
 

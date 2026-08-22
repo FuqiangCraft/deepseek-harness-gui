@@ -6,7 +6,7 @@ Please **do not** open a public issue for security vulnerabilities.
 
 To report a security problem, use one of the private channels:
 
-- **GitHub Security Advisory**: open a [private security advisory](https://github.com/FuQiangChen/deepseek-harness-gui/security/advisories/new) (recommended).
+- **GitHub Security Advisory**: open a [private security advisory](https://github.com/FuqiangCraft/deepseek-harness-gui/security/advisories/new) (recommended).
 - **Direct issue**: if GitHub advisories are not available, email the maintainer and include `[SECURITY]` in the subject line. Do not include secrets or exploit details in the title.
 
 You should receive a response within a few business days. Please include:
@@ -48,6 +48,12 @@ This client ships with a deliberately thin attack surface:
   are never uploaded automatically. Diagnostic exports exclude `~/.dsh`, user
   sessions, prompts, attachments, and workspace files. Users should still
   inspect an exported archive before sharing it.
-- Stable updates are accepted only after Tauri signature verification. Windows
-  and macOS stable installers must also pass platform code-signing and macOS
-  notarization checks in the release workflow.
+- Linux source builds currently inherit `glib 0.18.x` from Tauri's maintained
+  WebKitGTK/GTK3 integration. This version is affected by
+  `RUSTSEC-2024-0429` in `VariantStrIter`; the dependency is absent from the
+  officially distributed Windows and macOS binaries. Linux binary releases
+  remain disabled until the upstream stack provides a compatible fix.
+- Stable updates are accepted only after Tauri updater-signature verification.
+  Platform signing is verified when maintainer certificates are configured;
+  otherwise the release is explicitly identified as unsigned and Windows
+  SmartScreen or macOS Gatekeeper may display a warning.
