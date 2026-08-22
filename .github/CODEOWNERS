@@ -2,21 +2,21 @@
 # 核心维护者代码所有权与审核规则：保护关键路径，防止未经审核的代码合入主分支。
 
 # 全局默认所有者
-* @FuQiangChen
+* @FuqiangCraft
 
 # 核心 Rust 宿主与原生系统调用层
-/src-tauri/ @FuQiangChen
+/src-tauri/ @FuqiangCraft
 
 # 核心 Node.js Sidecar 引擎层
-/sidecar/ @FuQiangChen
+/sidecar/ @FuqiangCraft
 
 # CI/CD 流水线与 GitHub 自动化规则
-/.github/ @FuQiangChen
-/scripts/ @FuQiangChen
+/.github/ @FuqiangCraft
+/scripts/ @FuqiangCraft
 
 # 依赖配置与第三方许可证
-package.json @FuQiangChen
-package-lock.json @FuQiangChen
-Cargo.toml @FuQiangChen
-Cargo.lock @FuQiangChen
-THIRD_PARTY_LICENSES.txt @FuQiangChen
+package.json @FuqiangCraft
+package-lock.json @FuqiangCraft
+Cargo.toml @FuqiangCraft
+Cargo.lock @FuqiangCraft
+THIRD_PARTY_LICENSES.txt @FuqiangCraft

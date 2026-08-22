@@ -39,7 +39,6 @@ jobs:
         with: { languages: javascript-typescript }
       - uses: github/codeql-action/analyze@v3
         with:
-          upload: "never"
           output: results
       - uses: actions/upload-artifact@v4
         continue-on-error: true

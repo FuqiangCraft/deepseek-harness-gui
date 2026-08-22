@@ -147,13 +147,13 @@ jobs:
             **DeepSeek Harness GUI** - a cross-platform desktop client for the official DeepSeek Harness (dsh) engine, built on Tauri 2.0.
 
             ## Platforms
-            - Windows x64 (NSIS / MSI)
+            - Windows x64 (NSIS)
             - macOS (Apple Silicon / Intel, DMG)
 
             ## Install
             Download the installer for your platform. No Node.js or Rust installation is required; the engine is extracted automatically on first launch.
 
-            > Unsigned builds may trigger Windows SmartScreen / macOS Gatekeeper prompts. See SECURITY.md for the security model and for reporting issues.
+            > Platform signing is applied when maintainer certificates are configured. Unsigned builds may trigger Windows SmartScreen / macOS Gatekeeper prompts. Tauri updater artifacts remain cryptographically signed. See SECURITY.md for details.
           releaseDraft: true
           prerelease: false
           args: --verbose --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
