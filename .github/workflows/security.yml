@@ -24,7 +24,9 @@ jobs:
       - run: cd sidecar && pnpm install --frozen-lockfile
       - run: npm audit --audit-level=high
       - run: cd sidecar && pnpm audit --audit-level=high
-      - run: cargo audit --file src-tauri/Cargo.lock
+      # RUSTSEC-2024-0429 仅存在于未发布的 Linux GTK3 依赖树；Tauri 当前
+      # WebKitGTK 栈尚无兼容修复版本。恢复 Linux 官方发布前必须移除此忽略项。
+      - run: cargo audit --file src-tauri/Cargo.lock --ignore RUSTSEC-2024-0429
       - run: npm run licenses:check
 
   codeql:

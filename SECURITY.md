@@ -48,6 +48,11 @@ This client ships with a deliberately thin attack surface:
   are never uploaded automatically. Diagnostic exports exclude `~/.dsh`, user
   sessions, prompts, attachments, and workspace files. Users should still
   inspect an exported archive before sharing it.
+- Linux source builds currently inherit `glib 0.18.x` from Tauri's maintained
+  WebKitGTK/GTK3 integration. This version is affected by
+  `RUSTSEC-2024-0429` in `VariantStrIter`; the dependency is absent from the
+  officially distributed Windows and macOS binaries. Linux binary releases
+  remain disabled until the upstream stack provides a compatible fix.
 - Stable updates are accepted only after Tauri updater-signature verification.
   Platform signing is verified when maintainer certificates are configured;
   otherwise the release is explicitly identified as unsigned and Windows
