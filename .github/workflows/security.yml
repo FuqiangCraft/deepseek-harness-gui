@@ -13,7 +13,7 @@ jobs:
       contents: read
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - uses: pnpm/action-setup@v4
@@ -36,7 +36,7 @@ jobs:
       security-events: write
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v3
         with: { languages: javascript-typescript }
       - uses: github/codeql-action/analyze@v3
