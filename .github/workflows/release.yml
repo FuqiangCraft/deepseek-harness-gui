@@ -207,7 +207,7 @@ jobs:
           rm -rf "$RUNNER_TEMP/DeepSeek Harness GUI.app"
 
       - name: Upload release verification reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-verification-${{ matrix.target }}
           path: |
